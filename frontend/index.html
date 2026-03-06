@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>India LULC Temporal Dashboard (2001-2024)</title>
+    
+    <style>
+        :root {
+            --bg-body: #f4f7f9;
+            --bg-card: #ffffff;
+            --primary: #2b6cb0;
+            --primary-light: #4299e1;
+            --text-dark: #2d3748;
+            --text-gray: #718096;
+            --accent-green: #28a745;
+            --shadow: 0 4px 6px rgba(0,0,0,0.05);
+            --border-radius: 8px;
+        }
+
+        /* Prevent body scrolling for a true app-like feel */
+        body { font-family: 'Inter', system-ui, sans-serif; margin: 0; padding: 0; background-color: var(--bg-body); color: var(--text-dark); overflow: hidden; }
+        
+        /* Compact Header */
+        header { background: var(--bg-card); padding: 10px 20px; box-shadow: var(--shadow); border-bottom: 2px solid #e2e8f0; margin-bottom: 15px; text-align: center;}
+        header h1 { margin: 0; font-size: 24px; font-weight: 700; color: var(--primary); }
+        header p { margin: 2px 0 0; font-size: 14px; color: var(--text-gray); }
+
+        /* Dashboard stretches to fit exact screen height */
+        .dashboard-container { 
+            display: grid; 
+            grid-template-columns: 1.3fr 1fr; /* Map is now wider than the analysis panel */
+            gap: 20px; 
+            max-width: 1800px; 
+            height: calc(100vh - 95px); /* Forces exact 1-page fit */
+            margin: 0 auto; 
+            padding: 0 20px 20px; 
+        }
+        
+        /* Map Card fills vertical space */
+        #map-card { background: var(--bg-card); border-radius: var(--border-radius); box-shadow: var(--shadow); border: 1px solid #e2e8f0; display: flex; flex-direction: column; height: 100%;}
+        #map { flex-grow: 1; width: 100%; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;}
+        
+        /* Compact Manual Input Bar with Labels */
+        .manual-input-bar { padding: 10px 15px; background: #edf2f7; border-bottom: 1px solid #e2e8f0; display: flex; gap: 8px; align-items: center; justify-content: center; border-top-left-radius: 8px; border-top-right-radius: 8px;}
+        .manual-input-bar input { padding: 6px; border: 1px solid #cbd5e0; border-radius: 4px; width: 100px; font-size: 14px;}
+        .input-label { font-size: 13px; font-weight: bold; color: var(--text-dark); margin-left: 5px;}
+        .action-btn { padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; transition: background 0.2s; font-size: 13px;}
+        .action-btn:hover { background: var(--primary-light); }
+
+        /* Analysis Panel */
+        #analysis-panel { display: flex; flex-direction: column; gap: 15px; height: 100%; overflow-y: auto; padding-right: 5px;}
+        .card { background: var(--bg-card); border-radius: var(--border-radius); box-shadow: var(--shadow); padding: 15px; border: 1px solid #e2e8f0; }
+        .card-header { font-size: 18px; font-weight: 600; border-bottom: 2px solid var(--primary-light); display: inline-block; padding-bottom: 3px; margin-bottom: 10px; }
+        .card-metadata { font-size: 13px; color: var(--text-gray); margin-bottom: 15px; padding: 8px; background: #edf2f7; border-radius: 6px; min-height: 20px;}
+
+        /* Compact Legend */
+        #legend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-size: 12px; margin-top: 5px; }
+        .legend-item { display: flex; align-items: center; gap: 6px; }
+        .legend-color-box { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0;}
+
+        /* Timeline Graphics */
+        #timeline-viz-container { display: flex; flex-direction: column; gap: 10px; display: none;} 
+        .timeline-track { position: relative; height: 3px; background-color: #e2e8f0; margin: 30px 10px 10px;}
+        .timeline-year-point { position: absolute; width: 24px; height: 24px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.2); top: 50%; transform: translate(-50%, -50%); transition: all 0.2s; cursor: pointer; }
+        .timeline-year-point:hover { transform: translate(-50%, -50%) scale(1.3); z-index: 10;}
+        .timeline-year-label { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); font-weight: bold; font-size: 10px; color: var(--text-dark); background: white; padding: 2px 4px; border-radius: 3px; opacity: 0;}
+        .timeline-year-point.endpoint .timeline-year-label, .timeline-year-point:hover .timeline-year-label { opacity: 1; }
+
+        /* Compact Info Box */
+        #lulc-info-panel { font-size: 14px; background: #e2e8f0; padding: 10px; border-radius: 6px; display: none;}
+        #info-year { font-weight: 700; color: var(--primary); }
+        #info-lulc-text { font-weight: 600; }
+        .lulc-indicator-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 3px rgba(0,0,0,0.3); vertical-align: middle;}
+
+        /* Download Section */
+        .download-btn { margin-top: 10px; padding: 10px 15px; background-color: var(--accent-green); color: white; border: none; border-radius: var(--border-radius); cursor: pointer; font-size: 14px; font-weight: bold; width: 100%; transition: background 0.2s;}
+        .download-btn:hover { background-color: #218838; }
+        .tiff-download-section { margin-top: 15px; padding-top: 15px; border-top: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between;}
+    </style>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+
+    <header>
+        <h1>India LULC Platform</h1>
+        <p>Interactive temporal visualization of MODIS satellite data (2001-2024)</p>
+    </header>
+
+    <div class="dashboard-container">
+        
+        <div id="map-card">
+            <div class="manual-input-bar">
+                <span style="font-size: 13px; font-weight: bold; margin-right: 5px;">Manual Entry:</span>
+                
+                <label for="manual-lat" class="input-label">Lat:</label>
+                <input type="number" id="manual-lat" placeholder="e.g. 16.4177" step="0.0001">
+                
+                <label for="manual-lon" class="input-label">Lon:</label>
+                <input type="number" id="manual-lon" placeholder="e.g. 78.4807" step="0.0001">
+                
+                <button class="action-btn" onclick="submitManualCoords()">Search</button>
+            </div>
+            <div id="map"></div>
+        </div>
+
+        <div id="analysis-panel">
+            
+            <div class="card" id="legend-card">
+                <div class="card-header">LULC Class Palette</div>
+                <div id="legend-grid"></div>
+            </div>
+
+            <div class="card" id="analysis-results-card">
+                <div class="card-header">LULC Change Timeline</div>
+                
+                <div class="card-metadata" id="location-meta-display">
+                    Select a location on the map to begin analysis.
+                </div>
+                
+                <div id="timeline-viz-container">
+                    <div class="timeline-track" id="timeline-track"></div>
+
+                    <div id="lulc-info-panel">
+                        <span id="info-lulc-swatch" class="lulc-indicator-swatch"></span>
+                        Year <span id="info-year"></span>: Land Cover is <span id="info-lulc-text"></span>
+                    </div>
+
+                    <button id="downloadCsvBtn" class="download-btn">⬇ Download Data for this Location (CSV)</button>
+                    
+                    <div class="tiff-download-section">
+                        <div>
+                            <strong style="font-size: 14px;">Download Raw GeoTIFF Images:</strong><br>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <select id="tiff-year-select" style="padding: 6px; border-radius: 4px; border: 1px solid #ccc; font-size: 13px;"></select>
+                            <button class="action-btn" onclick="downloadTiffFile()">Download 1 Year</button>
+                            <button class="action-btn" style="background-color: #4a5568;" onclick="downloadAllTiffs()">Download All 24 (ZIP)</button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        const API_BASE_URL = "http://127.0.0.1:8000";
+        const START_YEAR = 2001;
+        const END_YEAR = 2024;
+        const TOTAL_YEARS = (END_YEAR - START_YEAR) + 1;
+        
+        let currentTimelineData = null;
+        let currentMarker = null;
+
+        const map = L.map('map').setView([22.9734, 78.6569], 5);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+
+        // Populate Year Dropdown for TIFF
+        const yearSelect = document.getElementById('tiff-year-select');
+        for (let y = START_YEAR; y <= END_YEAR; y++) {
+            const option = document.createElement('option');
+            option.value = y; option.text = y;
+            yearSelect.appendChild(option);
+        }
+
+        async function loadLegend() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/legend`);
+                const legendData = await response.json();
+                const legendGrid = document.getElementById('legend-grid');
+                Object.entries(legendData).forEach(([code, details]) => {
+                    const item = document.createElement('div');
+                    item.className = 'legend-item';
+                    item.innerHTML = `<div class="legend-color-box" style="background-color: ${details.color}"></div><span>${details.name}</span>`;
+                    legendGrid.appendChild(item);
+                });
+            } catch (error) { console.error("Legend load failed", error); }
+        }
+        loadLegend();
+
+        // Map Click Event
+        map.on('click', function(e) {
+            const lat = e.latlng.lat.toFixed(4);
+            const lon = e.latlng.lng.toFixed(4);
+            
+            document.getElementById('manual-lat').value = lat;
+            document.getElementById('manual-lon').value = lon;
+            
+            processLocation(lat, lon);
+        });
+
+        // Manual Input Button Event
+        function submitManualCoords() {
+            const lat = document.getElementById('manual-lat').value;
+            const lon = document.getElementById('manual-lon').value;
+            if (!lat || !lon) { alert("Please enter both Latitude and Longitude."); return; }
+            
+            map.setView([lat, lon], 8);
+            processLocation(lat, lon);
+        }
+
+        // Core processing function
+        async function processLocation(lat, lon) {
+            if (currentMarker) map.removeLayer(currentMarker);
+            currentMarker = L.marker([lat, lon]).addTo(map);
+
+            const metaDisplay = document.getElementById('location-meta-display');
+            const timelineViz = document.getElementById('timeline-viz-container');
+            
+            // Replaced the status banner with this clean inline message
+            metaDisplay.innerHTML = `<span style="color: var(--primary); font-weight: bold;">Analyzing coordinates: ${lat}, ${lon}... Please wait.</span>`;
+            timelineViz.style.display = "none";
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/lulc?lat=${lat}&lon=${lon}`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    alert(`REQUEST FAILED: ${data.detail}`);
+                    metaDisplay.innerHTML = "Select a location on the map to begin analysis.";
+                    map.removeLayer(currentMarker);
+                    return;
+                }
+
+                metaDisplay.innerHTML = `<strong>Location:</strong> ${data.location.state_detected} | <strong>Coordinates:</strong> ${data.location.lat}, ${data.location.lon}`;
+                
+                currentTimelineData = data.temporal_timeline;
+                generateColoredTimeline(currentTimelineData);
+                timelineViz.style.display = "flex";
+
+            } catch (error) {
+                alert("SERVER CONNECTION ERROR. Is your Python backend running?");
+                metaDisplay.innerHTML = "Select a location on the map to begin analysis.";
+            }
+        }
+
+        function generateColoredTimeline(timelineData) {
+            const track = document.getElementById('timeline-track');
+            track.innerHTML = ''; 
+            const pointSpacingPercent = 100 / (TOTAL_YEARS - 1);
+
+            timelineData.forEach((entry, index) => {
+                const isEndpoint = (index === 0 || index === timelineData.length - 1);
+                const point = document.createElement('div');
+                point.className = `timeline-year-point ${isEndpoint ? 'endpoint' : ''}`;
+                point.style.left = `${index * pointSpacingPercent}%`;
+                point.style.backgroundColor = entry.lulc_color;
+                
+                const yearLabel = document.createElement('div');
+                yearLabel.className = 'timeline-year-label';
+                yearLabel.innerText = entry.year;
+                point.appendChild(yearLabel);
+
+                point.addEventListener('mouseover', () => displayPointInfo(entry));
+                track.appendChild(point);
+            });
+            displayPointInfo(timelineData[timelineData.length-1]);
+        }
+
+        function displayPointInfo(entry) {
+            const infoPanel = document.getElementById('lulc-info-panel');
+            infoPanel.style.display = 'block';
+            infoPanel.style.borderLeft = `5px solid ${entry.lulc_color}`;
+            document.getElementById('info-year').innerText = entry.year;
+            document.getElementById('info-lulc-text').innerText = entry.lulc_name;
+            document.getElementById('info-lulc-swatch').style.backgroundColor = entry.lulc_color;
+        }
+
+        document.getElementById('downloadCsvBtn').addEventListener('click', function() {
+            if (!currentTimelineData) return;
+
+            const metaText = document.getElementById('location-meta-display').innerText;
+            const stateMatch = metaText.match(/Location:\s*([^|]+)/);
+            const coordMatch = metaText.match(/Coordinates:\s*(.+)/);
+            
+            const state = stateMatch ? stateMatch[1].trim() : "Unknown Region";
+            const coords = coordMatch ? coordMatch[1].trim() : "Unknown Coordinates";
+
+            let csvContent = "Report: India LULC Temporal Analysis (2001-2024)\n";
+            csvContent += `State/Region,${state}\n`;
+            csvContent += `Coordinates,"${coords}"\n\n`;
+            csvContent += "Year,Land Cover Classification,Hex Color Code\n";
+            
+            currentTimelineData.forEach(row => {
+                csvContent += `${row.year},"${row.lulc_name}",${row.lulc_color}\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `LULC_Analysis_${state.replace(/\s+/g, '_')}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url); 
+        });
+
+        function downloadTiffFile() {
+            const year = document.getElementById('tiff-year-select').value;
+            window.location.href = `${API_BASE_URL}/api/download-tiff?year=${year}`;
+        }
+
+        function downloadAllTiffs() {
+            window.location.href = `${API_BASE_URL}/api/download-all-tiffs`;
+        }
+    </script>
+</body>
+</html>
