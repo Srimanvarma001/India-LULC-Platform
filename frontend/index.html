@@ -3,140 +3,144 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>India LULC Temporal Dashboard (2001-2024)</title>
+    <title>India LULC Advanced Analytics (2001-2024)</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
     
     <style>
         :root {
-            --bg-body: #f4f7f9;
-            --bg-card: #ffffff;
-            --primary: #2b6cb0;
-            --primary-light: #4299e1;
-            --text-dark: #2d3748;
-            --text-gray: #718096;
-            --accent-green: #28a745;
-            --shadow: 0 4px 6px rgba(0,0,0,0.05);
-            --border-radius: 8px;
+            --bg-body: #f4f7f9; --bg-card: #ffffff;
+            --primary: #2b6cb0; --text-dark: #2d3748; 
+            --text-gray: #718096; --accent-green: #28a745; 
+            --shadow: 0 4px 6px rgba(0,0,0,0.05); --border-radius: 8px;
         }
 
-        /* Prevent body scrolling for a true app-like feel */
         body { font-family: 'Inter', system-ui, sans-serif; margin: 0; padding: 0; background-color: var(--bg-body); color: var(--text-dark); overflow: hidden; }
-        
-        /* Compact Header */
+
         header { background: var(--bg-card); padding: 10px 20px; box-shadow: var(--shadow); border-bottom: 2px solid #e2e8f0; margin-bottom: 15px; text-align: center;}
         header h1 { margin: 0; font-size: 24px; font-weight: 700; color: var(--primary); }
         header p { margin: 2px 0 0; font-size: 14px; color: var(--text-gray); }
 
-        /* Dashboard stretches to fit exact screen height */
-        .dashboard-container { 
-            display: grid; 
-            grid-template-columns: 1.3fr 1fr; /* Map is now wider than the analysis panel */
-            gap: 20px; 
-            max-width: 1800px; 
-            height: calc(100vh - 95px); /* Forces exact 1-page fit */
-            margin: 0 auto; 
-            padding: 0 20px 20px; 
-        }
-        
-        /* Map Card fills vertical space */
+        .dashboard-container { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; max-width: 1800px; height: calc(100vh - 95px); margin: 0 auto; padding: 0 20px 20px; }
+
         #map-card { background: var(--bg-card); border-radius: var(--border-radius); box-shadow: var(--shadow); border: 1px solid #e2e8f0; display: flex; flex-direction: column; height: 100%;}
         #map { flex-grow: 1; width: 100%; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;}
-        
-        /* Compact Manual Input Bar with Labels */
-        .manual-input-bar { padding: 10px 15px; background: #edf2f7; border-bottom: 1px solid #e2e8f0; display: flex; gap: 8px; align-items: center; justify-content: center; border-top-left-radius: 8px; border-top-right-radius: 8px;}
-        .manual-input-bar input { padding: 6px; border: 1px solid #cbd5e0; border-radius: 4px; width: 100px; font-size: 14px;}
-        .input-label { font-size: 13px; font-weight: bold; color: var(--text-dark); margin-left: 5px;}
-        .action-btn { padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; transition: background 0.2s; font-size: 13px;}
-        .action-btn:hover { background: var(--primary-light); }
 
-        /* Analysis Panel */
         #analysis-panel { display: flex; flex-direction: column; gap: 15px; height: 100%; overflow-y: auto; padding-right: 5px;}
         .card { background: var(--bg-card); border-radius: var(--border-radius); box-shadow: var(--shadow); padding: 15px; border: 1px solid #e2e8f0; }
-        .card-header { font-size: 18px; font-weight: 600; border-bottom: 2px solid var(--primary-light); display: inline-block; padding-bottom: 3px; margin-bottom: 10px; }
-        .card-metadata { font-size: 13px; color: var(--text-gray); margin-bottom: 15px; padding: 8px; background: #edf2f7; border-radius: 6px; min-height: 20px;}
+        .card-header { font-size: 18px; font-weight: 600; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 10px; }
+        .card-metadata { font-size: 13px; color: var(--text-gray); margin-bottom: 15px; padding: 8px; background: #edf2f7; border-radius: 6px; }
 
-        /* Compact Legend */
         #legend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-size: 12px; margin-top: 5px; }
         .legend-item { display: flex; align-items: center; gap: 6px; }
         .legend-color-box { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0;}
 
-        /* Timeline Graphics */
-        #timeline-viz-container { display: flex; flex-direction: column; gap: 10px; display: none;} 
-        .timeline-track { position: relative; height: 3px; background-color: #e2e8f0; margin: 30px 10px 10px;}
-        .timeline-year-point { position: absolute; width: 24px; height: 24px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.2); top: 50%; transform: translate(-50%, -50%); transition: all 0.2s; cursor: pointer; }
-        .timeline-year-point:hover { transform: translate(-50%, -50%) scale(1.3); z-index: 10;}
-        .timeline-year-label { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); font-weight: bold; font-size: 10px; color: var(--text-dark); background: white; padding: 2px 4px; border-radius: 3px; opacity: 0;}
-        .timeline-year-point.endpoint .timeline-year-label, .timeline-year-point:hover .timeline-year-label { opacity: 1; }
+        .chart-container { position: relative; height: 320px; width: 100%; }
 
-        /* Compact Info Box */
-        #lulc-info-panel { font-size: 14px; background: #e2e8f0; padding: 10px; border-radius: 6px; display: none;}
-        #info-year { font-weight: 700; color: var(--primary); }
-        #info-lulc-text { font-weight: 600; }
-        .lulc-indicator-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 3px rgba(0,0,0,0.3); vertical-align: middle;}
+        /* Minimalistic UI Styles */
+        .custom-toolbar { display: flex; align-items: center; background: white; padding: 8px 15px; border-bottom: 1px solid #e2e8f0; border-top-left-radius: 8px; border-top-right-radius: 8px; gap: 15px;}
+        
+        .tool-btn { padding: 6px 12px; background: white; color: var(--primary); border: 1px solid var(--primary); border-radius: 4px; cursor: pointer; font-weight: 600; transition: all 0.2s; font-size: 12px; display: flex; align-items: center; gap: 5px;}
+        .tool-btn:hover, .tool-btn.active { background: var(--primary); color: white; }
+        .btn-danger { color: #e53e3e; border-color: #e53e3e; }
+        .btn-danger:hover { background: #e53e3e; color: white; }
 
-        /* Download Section */
-        .download-btn { margin-top: 10px; padding: 10px 15px; background-color: var(--accent-green); color: white; border: none; border-radius: var(--border-radius); cursor: pointer; font-size: 14px; font-weight: bold; width: 100%; transition: background 0.2s;}
-        .download-btn:hover { background-color: #218838; }
-        .tiff-download-section { margin-top: 15px; padding-top: 15px; border-top: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between;}
+        .manual-bounds { display: none; align-items: center; gap: 8px; border-left: 2px solid #e2e8f0; padding-left: 15px;}
+        .manual-bounds input { padding: 4px 6px; border: 1px solid #cbd5e0; border-radius: 4px; width: 60px; font-size: 12px; }
+        .action-btn-small { padding: 5px 10px; background: var(--text-dark); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;}
+
+        .download-btn-main { margin-top: 5px; padding: 8px 15px; background-color: var(--accent-green); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; width: 100%; transition: background 0.2s;}
+        .download-btn-main:hover { background-color: #218838; }
+        
+        .download-zone { margin-top: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #e2e8f0; padding-top: 15px;}
+        .dl-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; }
+        .dl-title { font-size: 14px; font-weight: bold; color: var(--primary); margin-bottom: 3px;}
+        
+        /* UPDATED LAYOUT: Description and Controls on the same line */
+        .dl-row-layout { display: flex; justify-content: space-between; align-items: center; margin-top: 4px;}
+        .dl-desc { font-size: 11px; color: var(--text-gray); margin: 0;}
+        .dl-controls { display: flex; gap: 8px; align-items: center; }
+        .dl-controls select { padding: 6px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px; }
+        
+        .btn-dl { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; color: white; transition: opacity 0.2s;}
+        .btn-dl:hover { opacity: 0.9; }
+        .btn-dl:disabled { opacity: 0.5; cursor: not-allowed; }
+        .bg-blue { background-color: var(--primary); }
+        .bg-gray { background-color: #4a5568; }
     </style>
-    
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
 
     <header>
-        <h1>India LULC Platform</h1>
-        <p>Interactive temporal visualization of MODIS satellite data (2001-2024)</p>
+        <h1>India LULC Advanced Analytics</h1>
+        <p>Analyze historical land cover composition by drawing regions on the map.</p>
     </header>
 
     <div class="dashboard-container">
         
         <div id="map-card">
-            <div class="manual-input-bar">
-                <span style="font-size: 13px; font-weight: bold; margin-right: 5px;">Manual Entry:</span>
+            <div class="custom-toolbar">
+                <span style="font-size: 13px; font-weight: bold;">Draw Shape:</span>
+                <button class="tool-btn" id="btn-draw-poly">⬠ Polygon</button>
+                <button class="tool-btn" id="btn-draw-rect">▭ Rectangle</button>
+                <button class="tool-btn" id="btn-draw-circle">◯ Circle</button>
+                <button class="tool-btn btn-danger" id="btn-clear">🗑 Clear</button>
                 
-                <label for="manual-lat" class="input-label">Lat:</label>
-                <input type="number" id="manual-lat" placeholder="e.g. 16.4177" step="0.0001">
-                
-                <label for="manual-lon" class="input-label">Lon:</label>
-                <input type="number" id="manual-lon" placeholder="e.g. 78.4807" step="0.0001">
-                
-                <button class="action-btn" onclick="submitManualCoords()">Search</button>
+                <div class="manual-bounds" id="manual-bounds-section">
+                    <span style="font-size: 12px; font-weight:bold;">Bounds:</span>
+                    <input type="number" id="box-n" placeholder="N" step="0.01">
+                    <input type="number" id="box-s" placeholder="S" step="0.01">
+                    <input type="number" id="box-w" placeholder="W" step="0.01">
+                    <input type="number" id="box-e" placeholder="E" step="0.01">
+                    <button class="action-btn-small" onclick="submitManualBox()">Apply</button>
+                </div>
             </div>
             <div id="map"></div>
         </div>
 
         <div id="analysis-panel">
-            
             <div class="card" id="legend-card">
                 <div class="card-header">LULC Class Palette</div>
                 <div id="legend-grid"></div>
             </div>
 
             <div class="card" id="analysis-results-card">
-                <div class="card-header">LULC Change Timeline</div>
-                
+                <div class="card-header">Regional Composition Analysis</div>
                 <div class="card-metadata" id="location-meta-display">
-                    Select a location on the map to begin analysis.
+                    Select a drawing tool above the map to begin.
                 </div>
                 
-                <div id="timeline-viz-container">
-                    <div class="timeline-track" id="timeline-track"></div>
-
-                    <div id="lulc-info-panel">
-                        <span id="info-lulc-swatch" class="lulc-indicator-swatch"></span>
-                        Year <span id="info-year"></span>: Land Cover is <span id="info-lulc-text"></span>
+                <div id="timeline-viz-container" style="display: none;">
+                    <div class="chart-container">
+                        <canvas id="lulcChart"></canvas>
                     </div>
 
-                    <button id="downloadCsvBtn" class="download-btn">⬇ Download Data for this Location (CSV)</button>
+                    <button id="downloadCsvBtn" class="download-btn-main">⬇ Download Area Stats (CSV)</button>
                     
-                    <div class="tiff-download-section">
-                        <div>
-                            <strong style="font-size: 14px;">Download Raw GeoTIFF Images:</strong><br>
+                    <div class="download-zone">
+                        <div class="dl-card">
+                            <div class="dl-title">1. Download Cropped GeoTIFF</div>
+                            <div class="dl-row-layout">
+                                <p class="dl-desc">Download the raw satellite data masked to your exact drawn shape.</p>
+                                <div class="dl-controls">
+                                    <select class="year-select" id="tiff-year-crop"></select>
+                                    <button class="btn-dl bg-blue" onclick="downloadTiffFile('crop', this)">Download 1 Year</button>
+                                    <button class="btn-dl bg-gray" onclick="downloadAllTiffs('crop', this)">Download All (ZIP)</button>
+                                </div>
+                            </div>
                         </div>
-                        <div style="display: flex; gap: 8px;">
-                            <select id="tiff-year-select" style="padding: 6px; border-radius: 4px; border: 1px solid #ccc; font-size: 13px;"></select>
-                            <button class="action-btn" onclick="downloadTiffFile()">Download 1 Year</button>
-                            <button class="action-btn" style="background-color: #4a5568;" onclick="downloadAllTiffs()">Download All 24 (ZIP)</button>
+
+                        <div class="dl-card">
+                            <div class="dl-title">2. Download Original GeoTIFF</div>
+                            <div class="dl-row-layout">
+                                <p class="dl-desc">Download the full, uncropped satellite dataset for the entire region.</p>
+                                <div class="dl-controls">
+                                    <select class="year-select" id="tiff-year-orig"></select>
+                                    <button class="btn-dl bg-blue" onclick="downloadTiffFile('orig', this)">Download 1 Year</button>
+                                    <button class="btn-dl bg-gray" onclick="downloadAllTiffs('orig', this)">Download All (ZIP)</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -146,26 +150,48 @@
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script>
         const API_BASE_URL = "http://127.0.0.1:8000";
-        const START_YEAR = 2001;
-        const END_YEAR = 2024;
-        const TOTAL_YEARS = (END_YEAR - START_YEAR) + 1;
-        
-        let currentTimelineData = null;
-        let currentMarker = null;
+        const START_YEAR = 2001; const END_YEAR = 2024;
+        let currentTimelineData = null; let lulcChartInstance = null;
+        let drawnItems = new L.FeatureGroup(); let currentGeometry = null;
 
         const map = L.map('map').setView([22.9734, 78.6569], 5);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+        
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        }).addTo(map);
+        
+        map.addLayer(drawnItems);
 
-        // Populate Year Dropdown for TIFF
-        const yearSelect = document.getElementById('tiff-year-select');
-        for (let y = START_YEAR; y <= END_YEAR; y++) {
-            const option = document.createElement('option');
-            option.value = y; option.text = y;
-            yearSelect.appendChild(option);
+        const polygonDrawer = new L.Draw.Polygon(map, { allowIntersection: false });
+        const rectDrawer = new L.Draw.Rectangle(map, { shapeOptions: { color: '#2b6cb0' } });
+        const circleDrawer = new L.Draw.Circle(map, { shapeOptions: { color: '#2b6cb0' } });
+
+        const btns = document.querySelectorAll('.tool-btn');
+        function resetBtnStyles() { btns.forEach(b => b.classList.remove('active')); }
+        
+        document.getElementById('btn-draw-poly').addEventListener('click', (e) => { resetBtnStyles(); e.target.classList.add('active'); document.getElementById('manual-bounds-section').style.display='none'; polygonDrawer.enable(); });
+        document.getElementById('btn-draw-circle').addEventListener('click', (e) => { resetBtnStyles(); e.target.classList.add('active'); document.getElementById('manual-bounds-section').style.display='none'; circleDrawer.enable(); });
+        document.getElementById('btn-draw-rect').addEventListener('click', (e) => { 
+            resetBtnStyles(); e.target.classList.add('active'); 
+            document.getElementById('manual-bounds-section').style.display='flex'; 
+            rectDrawer.enable(); 
+        });
+        document.getElementById('btn-clear').addEventListener('click', () => { resetBtnStyles(); clearMap(); document.getElementById('manual-bounds-section').style.display='none'; });
+
+        function clearMap() {
+            drawnItems.clearLayers(); currentGeometry = null;
+            document.getElementById('timeline-viz-container').style.display = "none";
+            document.getElementById('location-meta-display').innerHTML = "Select a drawing tool above the map to begin.";
         }
+
+        document.querySelectorAll('.year-select').forEach(select => {
+            for (let y = START_YEAR; y <= END_YEAR; y++) select.appendChild(new Option(y, y));
+        });
 
         async function loadLegend() {
             try {
@@ -178,136 +204,149 @@
                     item.innerHTML = `<div class="legend-color-box" style="background-color: ${details.color}"></div><span>${details.name}</span>`;
                     legendGrid.appendChild(item);
                 });
-            } catch (error) { console.error("Legend load failed", error); }
+            } catch (e) {}
         }
         loadLegend();
 
-        // Map Click Event
-        map.on('click', function(e) {
-            const lat = e.latlng.lat.toFixed(4);
-            const lon = e.latlng.lng.toFixed(4);
+        function circleToPolygon(center, radius) {
+            const numPoints = 64; const coords = [];
+            const earthRadius = 6378137;
+            const lat = center.lat * Math.PI / 180; const lon = center.lng * Math.PI / 180;
+            const d = radius / earthRadius;
+
+            for (let i = 0; i <= numPoints; i++) {
+                const bearing = i * 2 * Math.PI / numPoints;
+                const outLat = Math.asin(Math.sin(lat) * Math.cos(d) + Math.cos(lat) * Math.sin(d) * Math.cos(bearing));
+                const outLon = lon + Math.atan2(Math.sin(bearing) * Math.sin(d) * Math.cos(lat), Math.cos(d) - Math.sin(lat) * Math.sin(outLat));
+                coords.push([outLon * 180 / Math.PI, outLat * 180 / Math.PI]);
+            }
+            return { type: "Polygon", coordinates: [coords] };
+        }
+
+        map.on(L.Draw.Event.CREATED, function (e) {
+            drawnItems.clearLayers(); drawnItems.addLayer(e.layer);
             
-            document.getElementById('manual-lat').value = lat;
-            document.getElementById('manual-lon').value = lon;
-            
-            processLocation(lat, lon);
+            if (e.layerType === 'circle') {
+                currentGeometry = circleToPolygon(e.layer.getLatLng(), e.layer.getRadius());
+            } else {
+                currentGeometry = e.layer.toGeoJSON().geometry;
+            }
+            processPolygon(currentGeometry);
         });
 
-        // Manual Input Button Event
-        function submitManualCoords() {
-            const lat = document.getElementById('manual-lat').value;
-            const lon = document.getElementById('manual-lon').value;
-            if (!lat || !lon) { alert("Please enter both Latitude and Longitude."); return; }
+        function submitManualBox() {
+            const n = parseFloat(document.getElementById('box-n').value); const s = parseFloat(document.getElementById('box-s').value);
+            const w = parseFloat(document.getElementById('box-w').value); const e = parseFloat(document.getElementById('box-e').value);
+            if (isNaN(n) || isNaN(s) || isNaN(w) || isNaN(e)) { alert("Enter all 4 coordinates."); return; }
             
-            map.setView([lat, lon], 8);
-            processLocation(lat, lon);
+            const bounds = [[s, w], [n, e]];
+            const rectLayer = L.rectangle(bounds, { color: '#2b6cb0' });
+            drawnItems.clearLayers(); drawnItems.addLayer(rectLayer); map.fitBounds(bounds); 
+            currentGeometry = rectLayer.toGeoJSON().geometry; processPolygon(currentGeometry);
         }
 
-        // Core processing function
-        async function processLocation(lat, lon) {
-            if (currentMarker) map.removeLayer(currentMarker);
-            currentMarker = L.marker([lat, lon]).addTo(map);
-
+        async function processPolygon(geometry) {
             const metaDisplay = document.getElementById('location-meta-display');
-            const timelineViz = document.getElementById('timeline-viz-container');
-            
-            // Replaced the status banner with this clean inline message
-            metaDisplay.innerHTML = `<span style="color: var(--primary); font-weight: bold;">Analyzing coordinates: ${lat}, ${lon}... Please wait.</span>`;
-            timelineViz.style.display = "none";
+            const vizContainer = document.getElementById('timeline-viz-container');
+            metaDisplay.innerHTML = `<span style="color: var(--primary); font-weight: bold;">⏳ Clipping satellite data... Please wait.</span>`;
+            vizContainer.style.display = "none";
 
             try {
-                const response = await fetch(`${API_BASE_URL}/api/lulc?lat=${lat}&lon=${lon}`);
+                const response = await fetch(`${API_BASE_URL}/api/lulc/polygon`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ geometry: geometry })
+                });
                 const data = await response.json();
+                if (!response.ok) { alert(`Analysis Failed`); clearMap(); return; }
 
-                if (!response.ok) {
-                    alert(`REQUEST FAILED: ${data.detail}`);
-                    metaDisplay.innerHTML = "Select a location on the map to begin analysis.";
-                    map.removeLayer(currentMarker);
-                    return;
-                }
-
-                metaDisplay.innerHTML = `<strong>Location:</strong> ${data.location.state_detected} | <strong>Coordinates:</strong> ${data.location.lat}, ${data.location.lon}`;
-                
+                metaDisplay.innerHTML = `<strong>Area Analysis Complete</strong>`;
                 currentTimelineData = data.temporal_timeline;
-                generateColoredTimeline(currentTimelineData);
-                timelineViz.style.display = "flex";
-
-            } catch (error) {
-                alert("SERVER CONNECTION ERROR. Is your Python backend running?");
-                metaDisplay.innerHTML = "Select a location on the map to begin analysis.";
-            }
+                renderStackedBarChart(currentTimelineData);
+                vizContainer.style.display = "block";
+            } catch (error) { clearMap(); }
         }
 
-        function generateColoredTimeline(timelineData) {
-            const track = document.getElementById('timeline-track');
-            track.innerHTML = ''; 
-            const pointSpacingPercent = 100 / (TOTAL_YEARS - 1);
+        function renderStackedBarChart(timelineData) {
+            const ctx = document.getElementById('lulcChart').getContext('2d');
+            if (lulcChartInstance) lulcChartInstance.destroy();
 
-            timelineData.forEach((entry, index) => {
-                const isEndpoint = (index === 0 || index === timelineData.length - 1);
-                const point = document.createElement('div');
-                point.className = `timeline-year-point ${isEndpoint ? 'endpoint' : ''}`;
-                point.style.left = `${index * pointSpacingPercent}%`;
-                point.style.backgroundColor = entry.lulc_color;
-                
-                const yearLabel = document.createElement('div');
-                yearLabel.className = 'timeline-year-label';
-                yearLabel.innerText = entry.year;
-                point.appendChild(yearLabel);
-
-                point.addEventListener('mouseover', () => displayPointInfo(entry));
-                track.appendChild(point);
+            const labels = timelineData.map(d => d.year);
+            const classMap = {};
+            timelineData.forEach((yearData) => {
+                Object.entries(yearData.stats).forEach(([className, stats]) => {
+                    if (!classMap[className]) classMap[className] = { label: className, data: Array(labels.length).fill(0), backgroundColor: stats.color };
+                });
             });
-            displayPointInfo(timelineData[timelineData.length-1]);
-        }
+            timelineData.forEach((yearData, index) => {
+                Object.entries(yearData.stats).forEach(([className, stats]) => { classMap[className].data[index] = stats.percentage; });
+            });
 
-        function displayPointInfo(entry) {
-            const infoPanel = document.getElementById('lulc-info-panel');
-            infoPanel.style.display = 'block';
-            infoPanel.style.borderLeft = `5px solid ${entry.lulc_color}`;
-            document.getElementById('info-year').innerText = entry.year;
-            document.getElementById('info-lulc-text').innerText = entry.lulc_name;
-            document.getElementById('info-lulc-swatch').style.backgroundColor = entry.lulc_color;
+            lulcChartInstance = new Chart(ctx, {
+                type: 'bar', data: { labels: labels, datasets: Object.values(classMap) },
+                options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, max: 100 } }, plugins: { legend: { display: false } } }
+            });
         }
 
         document.getElementById('downloadCsvBtn').addEventListener('click', function() {
             if (!currentTimelineData) return;
-
-            const metaText = document.getElementById('location-meta-display').innerText;
-            const stateMatch = metaText.match(/Location:\s*([^|]+)/);
-            const coordMatch = metaText.match(/Coordinates:\s*(.+)/);
-            
-            const state = stateMatch ? stateMatch[1].trim() : "Unknown Region";
-            const coords = coordMatch ? coordMatch[1].trim() : "Unknown Coordinates";
-
-            let csvContent = "Report: India LULC Temporal Analysis (2001-2024)\n";
-            csvContent += `State/Region,${state}\n`;
-            csvContent += `Coordinates,"${coords}"\n\n`;
-            csvContent += "Year,Land Cover Classification,Hex Color Code\n";
-            
-            currentTimelineData.forEach(row => {
-                csvContent += `${row.year},"${row.lulc_name}",${row.lulc_color}\n`;
-            });
-
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            
-            const link = document.createElement("a");
-            link.setAttribute("href", url);
-            link.setAttribute("download", `LULC_Analysis_${state.replace(/\s+/g, '_')}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url); 
+            let csvContent = "Year,Land Cover Class,Percentage (%),Area (Sq Km),Hex Color\n";
+            currentTimelineData.forEach(row => { Object.entries(row.stats).forEach(([className, stats]) => { csvContent += `${row.year},"${className}",${stats.percentage},${stats.area_sqkm},${stats.color}\n`; }); });
+            const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }));
+            link.download = `Polygon_Area_Analysis.csv`; link.click();
         });
 
-        function downloadTiffFile() {
-            const year = document.getElementById('tiff-year-select').value;
-            window.location.href = `${API_BASE_URL}/api/download-tiff?year=${year}`;
+        async function downloadTiffFile(type, btn) {
+            const year = document.getElementById(`tiff-year-${type}`).value;
+            const originalText = btn.innerText;
+            
+            btn.innerText = "⏳ Processing...";
+            btn.disabled = true;
+
+            if (type === 'orig') {
+                window.location.href = `${API_BASE_URL}/api/download-tiff-original?year=${year}`;
+                setTimeout(() => { btn.innerText = originalText; btn.disabled = false; }, 2500);
+            } else {
+                if (!currentGeometry) { alert("Please draw a shape first."); btn.innerText = originalText; btn.disabled = false; return; }
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/download-tiff-cropped?year=${year}`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ geometry: currentGeometry })
+                    });
+                    if (!response.ok) throw new Error("Failed");
+                    const a = document.createElement('a'); a.href = window.URL.createObjectURL(await response.blob());
+                    a.download = `Cropped_LULC_Data_${year}.tif`; a.click();
+                } catch (e) { 
+                    alert("Error downloading cropped file."); 
+                } finally {
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                }
+            }
         }
 
-        function downloadAllTiffs() {
-            window.location.href = `${API_BASE_URL}/api/download-all-tiffs`;
+        async function downloadAllTiffs(type, btn) {
+            const originalText = btn.innerText;
+            
+            btn.innerText = "⏳ Zipping files...";
+            btn.disabled = true;
+
+            if (type === 'orig') {
+                window.location.href = `${API_BASE_URL}/api/download-all-tiffs-original`;
+                setTimeout(() => { btn.innerText = originalText; btn.disabled = false; }, 3000);
+            } else {
+                if (!currentGeometry) { alert("Please draw a shape first."); btn.innerText = originalText; btn.disabled = false; return; }
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/download-all-tiffs-cropped`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ geometry: currentGeometry })
+                    });
+                    if (!response.ok) throw new Error("Failed");
+                    const a = document.createElement('a'); a.href = window.URL.createObjectURL(await response.blob());
+                    a.download = `Cropped_LULC_All_Years.zip`; a.click();
+                } catch (e) { 
+                    alert("Error generating zip file."); 
+                } finally {
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                }
+            }
         }
     </script>
 </body>
