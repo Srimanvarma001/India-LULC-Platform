@@ -154,7 +154,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script>
-        const API_BASE_URL = "http://127.0.0.1:8000";
+        const API_BASE_URL = window.location.origin;
         const START_YEAR = 2001; const END_YEAR = 2024;
         let currentTimelineData = null; let lulcChartInstance = null;
         let drawnItems = new L.FeatureGroup(); let currentGeometry = null;

@@ -17,6 +17,18 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 class PolygonRequest(BaseModel):
     geometry: Dict[str, Any]
 
+# --- NEW: Serve the Frontend HTML automatically ---
+@app.get("/")
+def serve_frontend():
+    # This mathematically finds your frontend folder no matter whose PC it runs on
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    html_path = os.path.abspath(os.path.join(base_dir, "..", "frontend", "index.html"))
+    
+    if os.path.exists(html_path):
+        return FileResponse(html_path)
+    else:
+        return {"error": f"Could not find the website at {html_path}"}
+
 @app.get("/api/legend")
 def get_legend():
     return LULC_PALETTE
