@@ -78,6 +78,16 @@
     </header>
 
     <div class="dashboard-container">
+                    <div id="offline-screen" style="display: none; text-align: center; padding: 100px 20px; background-color: #f8f9fa; height: 100vh;">
+                <h1 style="color: #2c5f2d; font-size: 2.5rem; margin-bottom: 20px;">🌍 LULC Analytics Dashboard</h1>
+                <p style="font-size: 1.2rem; color: #555; max-width: 600px; margin: 0 auto 30px; line-height: 1.6;">
+                    This interactive tool analyzes historical Land Use and Land Cover composition across India using high-resolution satellite datasets. 
+                </p>
+                <div style="background: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 20px; border-radius: 8px; max-width: 500px; margin: 0 auto;">
+                    <strong>⚠️ System Offline for Maintenance</strong><br><br>
+                    The physical lab server hosting the heavy geospatial data is currently offline. Please check back later or contact the laboratory administrator.
+                </div>
+            </div>
         
         <div id="map-card">
             <div class="custom-toolbar">
@@ -175,6 +185,25 @@
         // Replace this URL with your Cloudflare Tunnel link
         // ==========================================
         const API_BASE_URL = "https://api.sriman.online"; 
+        async function checkServerHealth() {
+    try {
+        // Try to fetch the tiny legend JSON as a ping
+        const response = await fetch(`${API_BASE_URL}/api/legend`, { signal: AbortSignal.timeout(5000) });
+        if (!response.ok) throw new Error("Server returned an error");
+        
+        // If it works, do nothing. The map loads normally!
+        console.log("Server is healthy!");
+
+    } catch (error) {
+        // IF IT FAILS: Hide the application and show the offline screen
+        console.error("Server is offline:", error);
+        document.querySelector('.container').style.display = 'none'; // Hides the map/charts
+        document.getElementById('offline-screen').style.display = 'block'; // Shows the error
+    }
+}
+
+// Run the check immediately when the page loads
+checkServerHealth();
         
         const START_YEAR = 2001; const END_YEAR = 2024;
         let currentTimelineData = null; let lulcChartInstance = null;
