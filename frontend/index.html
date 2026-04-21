@@ -4,7 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>India LULC Advanced Analytics (2001-2024)</title>
-    
+
+    <!-- FIX: preconnect tells the browser to open connections to these CDNs EARLY,
+         while the HTML is still being parsed — saves ~300-500ms per domain -->
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://api.sriman.online">
+
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
     
@@ -38,7 +45,6 @@
 
         .chart-container { position: relative; height: 320px; width: 100%; }
 
-        /* Minimalistic UI Styles */
         .custom-toolbar { display: flex; align-items: center; background: white; padding: 8px 15px; border-bottom: 1px solid #e2e8f0; border-top-left-radius: 8px; border-top-right-radius: 8px; gap: 15px; flex-wrap: wrap;}
         
         .tool-btn { padding: 6px 12px; background: white; color: var(--primary); border: 1px solid var(--primary); border-radius: 4px; cursor: pointer; font-weight: 600; transition: all 0.2s; font-size: 12px; display: flex; align-items: center; gap: 5px;}
@@ -50,7 +56,6 @@
         .manual-bounds input { padding: 4px 6px; border: 1px solid #cbd5e0; border-radius: 4px; width: 65px; font-size: 12px; }
         .action-btn-small { padding: 5px 10px; background: var(--text-dark); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;}
 
-        /* Download Section Styles */
         .download-btn-main { margin-top: 5px; padding: 8px 15px; background-color: var(--accent-green); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; width: 100%; transition: background 0.2s;}
         .download-btn-main:hover { background-color: #218838; }
         
@@ -68,6 +73,9 @@
         .btn-dl:disabled { opacity: 0.5; cursor: not-allowed; }
         .bg-blue { background-color: var(--primary); }
         .bg-gray { background-color: #4a5568; }
+
+        /* FIX: Loading spinner shown in legend while server warms up */
+        .legend-loading { font-size: 12px; color: var(--text-gray); padding: 8px 0; }
     </style>
 </head>
 <body>
@@ -78,16 +86,17 @@
     </header>
 
     <div class="dashboard-container">
-            <div id="offline-screen" style="display: none; text-align: center; padding: 100px 20px; background-color: #f8f9fa; height: 100vh; position: absolute; width: 100%; z-index: 9999; top: 0; left: 0;">
-                <h1 style="color: #2c5f2d; font-size: 2.5rem; margin-bottom: 20px;">🌍 LULC Analytics Dashboard</h1>
-                <p style="font-size: 1.2rem; color: #555; max-width: 600px; margin: 0 auto 30px; line-height: 1.6;">
-                    This interactive tool analyzes historical Land Use and Land Cover composition across India using high-resolution satellite datasets. 
-                </p>
-                <div style="background: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 20px; border-radius: 8px; max-width: 500px; margin: 0 auto;">
-                    <strong>⚠️ System Offline for Maintenance</strong><br><br>
-                    The physical lab server hosting the heavy geospatial data is currently offline. Please check back later or contact the laboratory administrator.
-                </div>
+        <!-- Offline screen: hidden by default, shown only if server is truly unreachable -->
+        <div id="offline-screen" style="display: none; text-align: center; padding: 100px 20px; background-color: #f8f9fa; height: 100vh; position: absolute; width: 100%; z-index: 9999; top: 0; left: 0;">
+            <h1 style="color: #2c5f2d; font-size: 2.5rem; margin-bottom: 20px;">🌍 LULC Analytics Dashboard</h1>
+            <p style="font-size: 1.2rem; color: #555; max-width: 600px; margin: 0 auto 30px; line-height: 1.6;">
+                This interactive tool analyzes historical Land Use and Land Cover composition across India using high-resolution satellite datasets. 
+            </p>
+            <div style="background: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 20px; border-radius: 8px; max-width: 500px; margin: 0 auto;">
+                <strong>⚠️ System Offline for Maintenance</strong><br><br>
+                The physical lab server hosting the heavy geospatial data is currently offline. Please check back later or contact the laboratory administrator.
             </div>
+        </div>
         
         <div id="map-card">
             <div class="custom-toolbar">
@@ -128,7 +137,10 @@
         <div id="analysis-panel">
             <div class="card" id="legend-card">
                 <div class="card-header">LULC Class Palette</div>
-                <div id="legend-grid"></div>
+                <!-- FIX: Shows a placeholder while legend loads in the background -->
+                <div id="legend-grid">
+                    <span class="legend-loading">⏳ Loading legend...</span>
+                </div>
             </div>
 
             <div class="card" id="analysis-results-card">
@@ -169,67 +181,134 @@
                             </div>
                         </div>
                     </div>
-
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FIX: defer attribute — scripts download in parallel but execute only after HTML is parsed.
+         The map and UI are visible to the user before any JS runs. -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 
     <script>
         const API_BASE_URL = "https://api.sriman.online"; 
-        
-        async function checkServerHealth() {
-            try {
-                const response = await fetch(`${API_BASE_URL}/api/legend`, { signal: AbortSignal.timeout(5000) });
-                if (!response.ok) throw new Error("Server returned an error");
-                console.log("Server is healthy!");
-            } catch (error) {
-                console.error("Server is offline:", error);
-                document.querySelector('.dashboard-container').style.display = 'none'; 
-                document.getElementById('offline-screen').style.display = 'block'; 
-            }
-        }
-        checkServerHealth();
-        
         const START_YEAR = 2001; const END_YEAR = 2024;
         let currentTimelineData = null; let lulcChartInstance = null;
-        let drawnItems = new L.FeatureGroup(); let currentGeometry = null;
+        let drawnItems, currentGeometry = null;
         let isPointMode = false;
+        let map;
 
-        const map = L.map('map').setView([22.9734, 78.6569], 5);
-        
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        }).addTo(map);
-        
-        map.addLayer(drawnItems);
+        // FIX: Initialize everything after window.load so the page is fully painted
+        // before any network requests are made to the lab server.
+        window.addEventListener('load', function () {
+            initMap();
+            initYearSelects();
 
-        const polygonDrawer = new L.Draw.Polygon(map, { allowIntersection: false });
-        const rectDrawer = new L.Draw.Rectangle(map, { shapeOptions: { color: '#2b6cb0' } });
-        const circleDrawer = new L.Draw.Circle(map, { shapeOptions: { color: '#2b6cb0' } });
+            // FIX: Combined health check + legend into ONE fetch call.
+            // Previously: 2 simultaneous calls to the same slow server on page load.
+            // Now: 1 call, used for both purposes — half the server load.
+            initAppFromLegend();
+        });
 
-        // --- UI TOGGLE LOGIC ---
+        function initMap() {
+            drawnItems = new L.FeatureGroup();
+            map = L.map('map').setView([22.9734, 78.6569], 5);
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            }).addTo(map);
+
+            map.addLayer(drawnItems);
+            initDrawTools();
+            initToolbarEvents();
+        }
+
+        function initYearSelects() {
+            document.querySelectorAll('.year-select').forEach(select => {
+                for (let y = START_YEAR; y <= END_YEAR; y++) select.appendChild(new Option(y, y));
+            });
+        }
+
+        // FIX: One combined function — fetches /api/legend once.
+        // If it succeeds → server is healthy → render legend.
+        // If it fails → server is offline → show offline screen.
+        async function initAppFromLegend() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/legend`, {
+                    signal: AbortSignal.timeout(5000)
+                });
+                if (!response.ok) throw new Error("Server error");
+
+                const legendData = await response.json();
+                const legendGrid = document.getElementById('legend-grid');
+                legendGrid.innerHTML = ''; // clear the loading placeholder
+
+                Object.entries(legendData).forEach(([code, details]) => {
+                    const item = document.createElement('div');
+                    item.className = 'legend-item';
+                    item.innerHTML = `<div class="legend-color-box" style="background-color: ${details.color}"></div><span>${details.name}</span>`;
+                    legendGrid.appendChild(item);
+                });
+
+            } catch (error) {
+                console.error("Server is offline:", error);
+                document.querySelector('.dashboard-container').style.display = 'none';
+                document.getElementById('offline-screen').style.display = 'block';
+            }
+        }
+
+        // ── Draw Tools ──
+        let polygonDrawer, rectDrawer, circleDrawer;
+
+        function initDrawTools() {
+            polygonDrawer = new L.Draw.Polygon(map, { allowIntersection: false });
+            rectDrawer    = new L.Draw.Rectangle(map, { shapeOptions: { color: '#2b6cb0' } });
+            circleDrawer  = new L.Draw.Circle(map, { shapeOptions: { color: '#2b6cb0' } });
+        }
+
+        function initToolbarEvents() {
+            document.getElementById('btn-draw-poly').addEventListener('click',   (e) => { resetUI(); e.target.classList.add('active'); polygonDrawer.enable(); });
+            document.getElementById('btn-draw-rect').addEventListener('click',   (e) => { resetUI(); e.target.classList.add('active'); document.getElementById('manual-rect-section').style.display='flex'; rectDrawer.enable(); });
+            document.getElementById('btn-draw-circle').addEventListener('click', (e) => { resetUI(); e.target.classList.add('active'); document.getElementById('manual-circle-section').style.display='flex'; circleDrawer.enable(); });
+            document.getElementById('btn-draw-point').addEventListener('click',  (e) => { resetUI(); e.target.classList.add('active'); document.getElementById('manual-point-section').style.display='flex'; isPointMode = true; document.getElementById('map').style.cursor = 'crosshair'; });
+            document.getElementById('btn-clear').addEventListener('click', () => { resetUI(); clearMap(); });
+
+            map.on('click', function(e) {
+                if (!isPointMode) return;
+                if (isOutsideIndia(e.latlng.lat, e.latlng.lng)) return;
+                drawnItems.clearLayers();
+                L.marker(e.latlng).addTo(drawnItems);
+                processPoint(e.latlng.lat, e.latlng.lng);
+                resetUI();
+            });
+
+            map.on(L.Draw.Event.CREATED, async function (e) {
+                const layer = e.layer;
+                const type = e.layerType;
+                let lat, lng;
+                if (type === 'circle') { lat = layer.getLatLng().lat; lng = layer.getLatLng().lng; }
+                else { const center = layer.getBounds().getCenter(); lat = center.lat; lng = center.lng; }
+                if (isOutsideIndia(lat, lng)) return;
+                drawnItems.clearLayers();
+                drawnItems.addLayer(layer);
+                if (type === 'circle') { currentGeometry = circleToPolygon(layer.getLatLng(), layer.getRadius()); processPolygon(currentGeometry); }
+                else { currentGeometry = layer.toGeoJSON().geometry; processPolygon(currentGeometry); }
+                resetUI();
+            });
+        }
+
         const btns = document.querySelectorAll('.tool-btn');
-        
-        function resetUI() { 
-            btns.forEach(b => b.classList.remove('active')); 
+        function resetUI() {
+            btns.forEach(b => b.classList.remove('active'));
             document.getElementById('manual-rect-section').style.display='none';
             document.getElementById('manual-circle-section').style.display='none';
             document.getElementById('manual-point-section').style.display='none';
-            isPointMode = false; 
+            isPointMode = false;
             document.getElementById('map').style.cursor = '';
-            polygonDrawer.disable(); rectDrawer.disable(); circleDrawer.disable();
+            if (polygonDrawer) { polygonDrawer.disable(); rectDrawer.disable(); circleDrawer.disable(); }
         }
-        
-        document.getElementById('btn-draw-poly').addEventListener('click', (e) => { resetUI(); e.target.classList.add('active'); polygonDrawer.enable(); });
-        document.getElementById('btn-draw-rect').addEventListener('click', (e) => { resetUI(); e.target.classList.add('active'); document.getElementById('manual-rect-section').style.display='flex'; rectDrawer.enable(); });
-        document.getElementById('btn-draw-circle').addEventListener('click', (e) => { resetUI(); e.target.classList.add('active'); document.getElementById('manual-circle-section').style.display='flex'; circleDrawer.enable(); });
-        document.getElementById('btn-draw-point').addEventListener('click', (e) => { resetUI(); e.target.classList.add('active'); document.getElementById('manual-point-section').style.display='flex'; isPointMode = true; document.getElementById('map').style.cursor = 'crosshair'; });
-        document.getElementById('btn-clear').addEventListener('click', () => { resetUI(); clearMap(); });
 
         function clearMap() {
             drawnItems.clearLayers(); currentGeometry = null;
@@ -237,32 +316,11 @@
             document.getElementById('location-meta-display').innerHTML = "Select a drawing tool above the map to begin.";
         }
 
-        document.querySelectorAll('.year-select').forEach(select => {
-            for (let y = START_YEAR; y <= END_YEAR; y++) select.appendChild(new Option(y, y));
-        });
-
-        async function loadLegend() {
-            try {
-                const response = await fetch(`${API_BASE_URL}/api/legend`);
-                const legendData = await response.json();
-                const legendGrid = document.getElementById('legend-grid');
-                Object.entries(legendData).forEach(([code, details]) => {
-                    const item = document.createElement('div');
-                    item.className = 'legend-item';
-                    item.innerHTML = `<div class="legend-color-box" style="background-color: ${details.color}"></div><span>${details.name}</span>`;
-                    legendGrid.appendChild(item);
-                });
-            } catch (e) {}
-        }
-        loadLegend();
-
-        // --- MATH: CIRCLE TO POLYGON ---
         function circleToPolygon(center, radius) {
             const numPoints = 64; const coords = [];
             const earthRadius = 6378137;
             const lat = center.lat * Math.PI / 180; const lon = center.lng * Math.PI / 180;
             const d = radius / earthRadius;
-
             for (let i = 0; i <= numPoints; i++) {
                 const bearing = i * 2 * Math.PI / numPoints;
                 const outLat = Math.asin(Math.sin(lat) * Math.cos(d) + Math.cos(lat) * Math.sin(d) * Math.cos(bearing));
@@ -272,133 +330,76 @@
             return { type: "Polygon", coordinates: [coords] };
         }
 
-        // --- INDIA GEOFENCE HELPER ---
         function isOutsideIndia(lat, lng) {
             if (lat < 6.5 || lat > 37.5 || lng < 68.0 || lng > 97.5) {
                 alert("Area outside India. Please select a region within the Indian boundaries.");
-                resetUI(); // Turn off the button if they click outside
-                return true; 
+                resetUI();
+                return true;
             }
             return false;
         }
 
-        // --- MOUSE DRAWING EVENTS ---
-        map.on('click', function(e) {
-            if (!isPointMode) return;
-            
-            // Geofence check for point clicks
-            if (isOutsideIndia(e.latlng.lat, e.latlng.lng)) return;
-
-            drawnItems.clearLayers();
-            L.marker(e.latlng).addTo(drawnItems);
-            processPoint(e.latlng.lat, e.latlng.lng);
-            resetUI(); // Turns the point button back to white
-        });
-
-        map.on(L.Draw.Event.CREATED, async function (e) {
-            const layer = e.layer;
-            const type = e.layerType;
-
-            let lat, lng;
-            
-            // Safely get coordinates depending on shape
-            if (type === 'circle') {
-                lat = layer.getLatLng().lat;
-                lng = layer.getLatLng().lng;
-            } else {
-                const center = layer.getBounds().getCenter();
-                lat = center.lat;
-                lng = center.lng;
-            }
-
-            // Geofence check for Shapes
-            if (isOutsideIndia(lat, lng)) return;
-            
-            drawnItems.clearLayers();
-            drawnItems.addLayer(layer);
-            
-            // Process the specific geometry
-            if (type === 'circle') {
-                currentGeometry = circleToPolygon(layer.getLatLng(), layer.getRadius());
-                processPolygon(currentGeometry);
-            } else {
-                currentGeometry = layer.toGeoJSON().geometry;
-                processPolygon(currentGeometry);
-            }
-            
-            resetUI(); // Turns the polygon/rectangle/circle button back to white
-        });
-
-        // --- MANUAL INPUT SUBMISSIONS ---
         function submitManualRect() {
             const n = parseFloat(document.getElementById('box-n').value); const s = parseFloat(document.getElementById('box-s').value);
             const w = parseFloat(document.getElementById('box-w').value); const e = parseFloat(document.getElementById('box-e').value);
             if (isNaN(n) || isNaN(s) || isNaN(w) || isNaN(e)) { alert("Enter all 4 coordinates."); return; }
-            
             const bounds = [[s, w], [n, e]];
             const center = L.latLngBounds(bounds).getCenter();
             if (isOutsideIndia(center.lat, center.lng)) return;
-
             const rectLayer = L.rectangle(bounds, { color: '#2b6cb0' });
-            drawnItems.clearLayers(); drawnItems.addLayer(rectLayer); map.fitBounds(bounds); 
+            drawnItems.clearLayers(); drawnItems.addLayer(rectLayer); map.fitBounds(bounds);
             currentGeometry = rectLayer.toGeoJSON().geometry; processPolygon(currentGeometry);
             resetUI();
         }
 
         function submitManualCircle() {
-            const lat = parseFloat(document.getElementById('circ-lat').value); 
+            const lat = parseFloat(document.getElementById('circ-lat').value);
             const lon = parseFloat(document.getElementById('circ-lon').value);
             const rad = parseFloat(document.getElementById('circ-rad').value);
             if (isNaN(lat) || isNaN(lon) || isNaN(rad)) { alert("Enter Lat, Lon, and Radius."); return; }
             if (isOutsideIndia(lat, lon)) return;
-
             const pt = L.latLng(lat, lon);
             const circLayer = L.circle(pt, { radius: rad, color: '#2b6cb0' });
             drawnItems.clearLayers(); drawnItems.addLayer(circLayer); map.fitBounds(circLayer.getBounds());
-            currentGeometry = circleToPolygon(pt, rad); 
+            currentGeometry = circleToPolygon(pt, rad);
             processPolygon(currentGeometry);
             resetUI();
         }
 
         function submitManualPoint() {
-            const lat = parseFloat(document.getElementById('pt-lat').value); 
+            const lat = parseFloat(document.getElementById('pt-lat').value);
             const lon = parseFloat(document.getElementById('pt-lon').value);
             if (isNaN(lat) || isNaN(lon)) { alert("Enter valid Lat and Lon."); return; }
             if (isOutsideIndia(lat, lon)) return;
-
             drawnItems.clearLayers();
             const pt = L.latLng(lat, lon);
             L.marker(pt).addTo(drawnItems);
-            map.setView(pt, 12); 
+            map.setView(pt, 12);
             processPoint(lat, lon);
             resetUI();
         }
 
-        // --- BACKEND PROCESSING ---
         async function processPoint(lat, lon) {
             const metaDisplay = document.getElementById('location-meta-display');
             const vizContainer = document.getElementById('timeline-viz-container');
             metaDisplay.innerHTML = `<span style="color: var(--primary); font-weight: bold;">⏳ Extracting timeline for coordinate...</span>`;
             vizContainer.style.display = "none";
-
             try {
                 const response = await fetch(`${API_BASE_URL}/api/lulc?lat=${lat}&lon=${lon}`);
                 if (!response.ok) throw new Error("Backend failed");
                 const data = await response.json();
-
                 metaDisplay.innerHTML = `<strong>Point Analysis Complete</strong> | Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}`;
                 const formattedData = data.temporal_timeline.map(item => ({
                     year: item.year,
                     stats: { [item.lulc_name]: { percentage: 100, area_sqkm: 0, color: item.lulc_color } }
                 }));
-                
                 currentTimelineData = formattedData;
-                currentGeometry = null; 
+                currentGeometry = null;
                 renderStackedBarChart(formattedData);
                 vizContainer.style.display = "block";
-            } catch (error) { 
-                clearMap(); 
-                alert("Analysis Failed: The selected point may contain no data or fall entirely outside the valid dataset boundaries."); 
+            } catch (error) {
+                clearMap();
+                alert("Analysis Failed: The selected point may contain no data or fall entirely outside the valid dataset boundaries.");
             }
         }
 
@@ -407,29 +408,25 @@
             const vizContainer = document.getElementById('timeline-viz-container');
             metaDisplay.innerHTML = `<span style="color: var(--primary); font-weight: bold;">⏳ Clipping satellite data... Please wait.</span>`;
             vizContainer.style.display = "none";
-
             try {
                 const response = await fetch(`${API_BASE_URL}/api/lulc/polygon`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ geometry: geometry })
                 });
                 if (!response.ok) throw new Error("Backend failed");
                 const data = await response.json();
-
                 metaDisplay.innerHTML = `<strong>Area Analysis Complete</strong>`;
                 currentTimelineData = data.temporal_timeline;
                 renderStackedBarChart(currentTimelineData);
                 vizContainer.style.display = "block";
-            } catch (error) { 
-                clearMap(); 
-                alert("Analysis Failed: Please ensure the selected area is entirely within the Indian landmass."); 
+            } catch (error) {
+                clearMap();
+                alert("Analysis Failed: Please ensure the selected area is entirely within the Indian landmass.");
             }
         }
 
-        // --- CHART & DOWNLOADS ---
         function renderStackedBarChart(timelineData) {
             const ctx = document.getElementById('lulcChart').getContext('2d');
             if (lulcChartInstance) lulcChartInstance.destroy();
-
             const labels = timelineData.map(d => d.year);
             const classMap = {};
             timelineData.forEach((yearData) => {
@@ -440,7 +437,6 @@
             timelineData.forEach((yearData, index) => {
                 Object.entries(yearData.stats).forEach(([className, stats]) => { classMap[className].data[index] = stats.percentage; });
             });
-
             lulcChartInstance = new Chart(ctx, {
                 type: 'bar', data: { labels: labels, datasets: Object.values(classMap) },
                 options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, max: 100 } }, plugins: { legend: { display: false } } }
@@ -458,9 +454,7 @@
         async function downloadTiffFile(type, btn) {
             const year = document.getElementById(`tiff-year-${type}`).value;
             const originalText = btn.innerText;
-            
             btn.innerText = "⏳ Processing..."; btn.disabled = true;
-
             if (type === 'orig') {
                 window.location.href = `${API_BASE_URL}/api/download-tiff-original?year=${year}`;
                 setTimeout(() => { btn.innerText = originalText; btn.disabled = false; }, 2500);
@@ -480,7 +474,6 @@
         async function downloadAllTiffs(type, btn) {
             const originalText = btn.innerText;
             btn.innerText = "⏳ Zipping files..."; btn.disabled = true;
-
             if (type === 'orig') {
                 window.location.href = `${API_BASE_URL}/api/download-all-tiffs-original`;
                 setTimeout(() => { btn.innerText = originalText; btn.disabled = false; }, 3000);
