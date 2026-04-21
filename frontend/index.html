@@ -26,7 +26,6 @@
         header h1 { margin: 0; font-size: 24px; font-weight: 700; color: var(--primary); }
         header p { margin: 2px 0 0; font-size: 14px; color: var(--text-gray); }
 
-        /* Offline Banner - lives OUTSIDE dashboard, so hiding dashboard never swallows it */
         #offline-banner {
             display: none;
             align-items: center;
@@ -109,7 +108,6 @@
         <p>Analyze historical land cover composition by drawing regions or selecting points on the map.</p>
     </header>
 
-    <!-- FIX: Banner is OUTSIDE .dashboard-container — hiding the dashboard can never hide this -->
     <div id="offline-banner">
         <span class="banner-icon">&#9888;&#65039;</span>
         <div>
@@ -207,7 +205,6 @@
         </div>
     </div>
 
-    <!-- Scripts at bottom = non-blocking. NO defer because Leaflet.Draw must load after Leaflet — order matters. -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -220,7 +217,6 @@
         let isPointMode = false;
         let serverOnline = false;
 
-        // Map always initializes immediately — no backend needed for this
         const map = L.map('map').setView([22.9734, 78.6569], 5);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
@@ -235,18 +231,14 @@
             for (let y = START_YEAR; y <= END_YEAR; y++) select.appendChild(new Option(y, y));
         });
 
-        // Backend check runs after map is painted (setTimeout 0 = next event loop tick)
         setTimeout(checkServerAndLoadLegend, 0);
 
         async function checkServerAndLoadLegend() {
             try {
-                const response = await fetch(`${API_BASE_URL}/api/legend`, {
-                    signal: AbortSignal.timeout(5000)
-                });
+                const response = await fetch(`${API_BASE_URL}/api/legend`, { signal: AbortSignal.timeout(5000) });
                 if (!response.ok) throw new Error("Server error");
                 const legendData = await response.json();
                 serverOnline = true;
-
                 const legendGrid = document.getElementById('legend-grid');
                 legendGrid.innerHTML = '';
                 Object.entries(legendData).forEach(([code, details]) => {
@@ -255,12 +247,9 @@
                     item.innerHTML = `<div class="legend-color-box" style="background-color:${details.color}"></div><span>${details.name}</span>`;
                     legendGrid.appendChild(item);
                 });
-
-                // Restore buttons if this was a retry
                 document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('server-down'));
                 document.getElementById('offline-banner').classList.remove('visible');
                 document.getElementById('location-meta-display').innerHTML = 'Select a drawing tool above the map to begin.';
-
             } catch (error) {
                 serverOnline = false;
                 showOfflineState();
@@ -288,10 +277,22 @@
             }
         }
 
-        // Guard: blocks any draw action if server is down
+        // ─── Unified error display helper ────────────────────────────────────────
+        // Every error in this app now goes through this one function so the style
+        // is always the same red ❌ panel — no more browser alert() popups.
+        function showPanelError(message) {
+            const metaDisplay = document.getElementById('location-meta-display');
+            const vizContainer = document.getElementById('timeline-viz-container');
+            metaDisplay.innerHTML = `<span style="color:#c53030;">&#10060; ${message}</span>`;
+            vizContainer.style.display = "none";
+            drawnItems.clearLayers();
+            currentGeometry = null;
+        }
+
+        // Guard: blocks any draw action if server is down — now uses panel, not alert()
         function guardedAction(fn) {
             if (!serverOnline) {
-                alert("The analysis server is currently offline.\nDraw tools will be enabled once the server comes back online.");
+                showPanelError("The analysis server is currently offline. Draw tools will be re-enabled once the server comes back online.");
                 return;
             }
             fn();
@@ -323,6 +324,16 @@
                 : `<span style="color:#856404;">&#9888; Analysis unavailable — lab server is offline. The map is still fully explorable.</span>`;
         }
 
+        // ─── isOutsideIndia now shows panel error instead of alert() ─────────────
+        function isOutsideIndia(lat, lng) {
+            if (lat < 6.5 || lat > 37.5 || lng < 68.0 || lng > 97.5) {
+                showPanelError("No data found for this location. Please select a region within the Indian boundaries.");
+                resetUI();
+                return true;
+            }
+            return false;
+        }
+
         map.on('click', function(e) {
             if (!isPointMode) return;
             if (isOutsideIndia(e.latlng.lat, e.latlng.lng)) return;
@@ -344,35 +355,45 @@
             resetUI();
         });
 
+        // ─── Manual input helpers — panel errors instead of alert() ──────────────
         function submitManualRect() {
-            if (!serverOnline) { alert("Server is offline."); return; }
+            if (!serverOnline) { showPanelError("The analysis server is currently offline."); return; }
             const n=parseFloat(document.getElementById('box-n').value), s=parseFloat(document.getElementById('box-s').value),
                   w=parseFloat(document.getElementById('box-w').value), e=parseFloat(document.getElementById('box-e').value);
-            if (isNaN(n)||isNaN(s)||isNaN(w)||isNaN(e)) { alert("Enter all 4 coordinates."); return; }
+            if (isNaN(n)||isNaN(s)||isNaN(w)||isNaN(e)) {
+                showPanelError("Please fill in all 4 boundary coordinates (North, South, West, East).");
+                return;
+            }
             const bounds=[[s,w],[n,e]], center=L.latLngBounds(bounds).getCenter();
-            if (isOutsideIndia(center.lat,center.lng)) return;
+            if (isOutsideIndia(center.lat, center.lng)) return;
             const rectLayer=L.rectangle(bounds,{color:'#2b6cb0'});
             drawnItems.clearLayers(); drawnItems.addLayer(rectLayer); map.fitBounds(bounds);
             currentGeometry=rectLayer.toGeoJSON().geometry; processPolygon(currentGeometry); resetUI();
         }
 
         function submitManualCircle() {
-            if (!serverOnline) { alert("Server is offline."); return; }
+            if (!serverOnline) { showPanelError("The analysis server is currently offline."); return; }
             const lat=parseFloat(document.getElementById('circ-lat').value),
                   lon=parseFloat(document.getElementById('circ-lon').value),
                   rad=parseFloat(document.getElementById('circ-rad').value);
-            if (isNaN(lat)||isNaN(lon)||isNaN(rad)) { alert("Enter Lat, Lon, and Radius."); return; }
-            if (isOutsideIndia(lat,lon)) return;
+            if (isNaN(lat)||isNaN(lon)||isNaN(rad)) {
+                showPanelError("Please enter a valid Latitude, Longitude, and Radius to define the circle.");
+                return;
+            }
+            if (isOutsideIndia(lat, lon)) return;
             const pt=L.latLng(lat,lon), circLayer=L.circle(pt,{radius:rad,color:'#2b6cb0'});
             drawnItems.clearLayers(); drawnItems.addLayer(circLayer); map.fitBounds(circLayer.getBounds());
             currentGeometry=circleToPolygon(pt,rad); processPolygon(currentGeometry); resetUI();
         }
 
         function submitManualPoint() {
-            if (!serverOnline) { alert("Server is offline."); return; }
+            if (!serverOnline) { showPanelError("The analysis server is currently offline."); return; }
             const lat=parseFloat(document.getElementById('pt-lat').value), lon=parseFloat(document.getElementById('pt-lon').value);
-            if (isNaN(lat)||isNaN(lon)) { alert("Enter valid Lat and Lon."); return; }
-            if (isOutsideIndia(lat,lon)) return;
+            if (isNaN(lat)||isNaN(lon)) {
+                showPanelError("Please enter a valid Latitude and Longitude for the point.");
+                return;
+            }
+            if (isOutsideIndia(lat, lon)) return;
             drawnItems.clearLayers(); L.marker(L.latLng(lat,lon)).addTo(drawnItems);
             map.setView(L.latLng(lat,lon),12); processPoint(lat,lon); resetUI();
         }
@@ -389,14 +410,6 @@
             return { type:"Polygon", coordinates:[coords] };
         }
 
-        function isOutsideIndia(lat, lng) {
-            if (lat<6.5||lat>37.5||lng<68.0||lng>97.5) {
-                alert("Area outside India. Please select a region within the Indian boundaries.");
-                resetUI(); return true;
-            }
-            return false;
-        }
-
         async function processPoint(lat, lon) {
             const metaDisplay=document.getElementById('location-meta-display'), vizContainer=document.getElementById('timeline-viz-container');
             metaDisplay.innerHTML=`<span style="color:var(--primary);font-weight:bold;">&#9203; Extracting timeline for coordinate...</span>`;
@@ -410,13 +423,11 @@
                 currentTimelineData=formattedData; currentGeometry=null;
                 renderStackedBarChart(formattedData); vizContainer.style.display="block";
             } catch(error) {
-                clearMap();
-                // TypeError = network failure = server went down mid-session
                 if (error instanceof TypeError) {
                     serverOnline = false;
                     showOfflineState();
                 } else {
-                    metaDisplay.innerHTML = `<span style="color:#c53030;">&#10060; No data found for this point. Try a different location inside India.</span>`;
+                    showPanelError("No data found for this point. Try a different location inside India.");
                 }
             }
         }
@@ -432,13 +443,11 @@
                 metaDisplay.innerHTML=`<strong>Area Analysis Complete</strong>`;
                 currentTimelineData=data.temporal_timeline; renderStackedBarChart(currentTimelineData); vizContainer.style.display="block";
             } catch(error) {
-                clearMap();
-                // TypeError = network failure = server went down mid-session
                 if (error instanceof TypeError) {
                     serverOnline = false;
                     showOfflineState();
                 } else {
-                    metaDisplay.innerHTML = `<span style="color:#c53030;">&#10060; Analysis failed. Ensure the selected area is entirely within the Indian landmass.</span>`;
+                    showPanelError("Analysis failed. Ensure the selected area is entirely within the Indian landmass.");
                 }
             }
         }
@@ -459,30 +468,45 @@
             const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'})); a.download="Area_Analysis.csv"; a.click();
         });
 
-        async function downloadTiffFile(type,btn) {
+        // ─── Download helpers — panel errors instead of alert() ──────────────────
+        async function downloadTiffFile(type, btn) {
             const year=document.getElementById(`tiff-year-${type}`).value, orig=btn.innerText;
             btn.innerText="&#9203; Processing..."; btn.disabled=true;
-            if (type==='orig') { window.location.href=`${API_BASE_URL}/api/download-tiff-original?year=${year}`; setTimeout(()=>{btn.innerText=orig;btn.disabled=false;},2500); }
-            else {
-                if (!currentGeometry) { alert("Please draw a shape first."); btn.innerText=orig; btn.disabled=false; return; }
+            if (type==='orig') {
+                window.location.href=`${API_BASE_URL}/api/download-tiff-original?year=${year}`;
+                setTimeout(()=>{btn.innerText=orig; btn.disabled=false;},2500);
+            } else {
+                if (!currentGeometry) {
+                    showPanelError("Please draw a shape on the map first before downloading a cropped file.");
+                    btn.innerText=orig; btn.disabled=false; return;
+                }
                 try {
                     const r=await fetch(`${API_BASE_URL}/api/download-tiff-cropped?year=${year}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({geometry:currentGeometry})});
                     if (!r.ok) throw new Error("Failed");
                     const a=document.createElement('a'); a.href=window.URL.createObjectURL(await r.blob()); a.download=`Cropped_LULC_Data_${year}.tif`; a.click();
-                } catch(e){alert("Error downloading cropped file.");} finally{btn.innerText=orig;btn.disabled=false;}
+                } catch(e) {
+                    showPanelError("Could not download the cropped GeoTIFF. Please try again.");
+                } finally { btn.innerText=orig; btn.disabled=false; }
             }
         }
 
-        async function downloadAllTiffs(type,btn) {
+        async function downloadAllTiffs(type, btn) {
             const orig=btn.innerText; btn.innerText="&#9203; Zipping files..."; btn.disabled=true;
-            if (type==='orig') { window.location.href=`${API_BASE_URL}/api/download-all-tiffs-original`; setTimeout(()=>{btn.innerText=orig;btn.disabled=false;},3000); }
-            else {
-                if (!currentGeometry) { alert("Please draw a shape first."); btn.innerText=orig; btn.disabled=false; return; }
+            if (type==='orig') {
+                window.location.href=`${API_BASE_URL}/api/download-all-tiffs-original`;
+                setTimeout(()=>{btn.innerText=orig; btn.disabled=false;},3000);
+            } else {
+                if (!currentGeometry) {
+                    showPanelError("Please draw a shape on the map first before downloading a cropped ZIP.");
+                    btn.innerText=orig; btn.disabled=false; return;
+                }
                 try {
                     const r=await fetch(`${API_BASE_URL}/api/download-all-tiffs-cropped`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({geometry:currentGeometry})});
                     if (!r.ok) throw new Error("Failed");
                     const a=document.createElement('a'); a.href=window.URL.createObjectURL(await r.blob()); a.download="Cropped_LULC_All_Years.zip"; a.click();
-                } catch(e){alert("Error generating zip file.");} finally{btn.innerText=orig;btn.disabled=false;}
+                } catch(e) {
+                    showPanelError("Could not generate the ZIP archive. Please try again.");
+                } finally { btn.innerText=orig; btn.disabled=false; }
             }
         }
     </script>
