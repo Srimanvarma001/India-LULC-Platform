@@ -78,7 +78,7 @@
     </header>
 
     <div class="dashboard-container">
-                    <div id="offline-screen" style="display: none; text-align: center; padding: 100px 20px; background-color: #f8f9fa; height: 100vh;">
+            <div id="offline-screen" style="display: none; text-align: center; padding: 100px 20px; background-color: #f8f9fa; height: 100vh; position: absolute; width: 100%; z-index: 9999; top: 0; left: 0;">
                 <h1 style="color: #2c5f2d; font-size: 2.5rem; margin-bottom: 20px;">🌍 LULC Analytics Dashboard</h1>
                 <p style="font-size: 1.2rem; color: #555; max-width: 600px; margin: 0 auto 30px; line-height: 1.6;">
                     This interactive tool analyzes historical Land Use and Land Cover composition across India using high-resolution satellite datasets. 
@@ -180,30 +180,20 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script>
-        // ==========================================
-        // ⚠️ DEPLOYMENT STEP: 
-        // Replace this URL with your Cloudflare Tunnel link
-        // ==========================================
         const API_BASE_URL = "https://api.sriman.online"; 
-        async function checkServerHealth() {
-    try {
-        // Try to fetch the tiny legend JSON as a ping
-        const response = await fetch(`${API_BASE_URL}/api/legend`, { signal: AbortSignal.timeout(5000) });
-        if (!response.ok) throw new Error("Server returned an error");
         
-        // If it works, do nothing. The map loads normally!
-        console.log("Server is healthy!");
-
-    } catch (error) {
-        // IF IT FAILS: Hide the application and show the offline screen
-        console.error("Server is offline:", error);
-        document.querySelector('.container').style.display = 'none'; // Hides the map/charts
-        document.getElementById('offline-screen').style.display = 'block'; // Shows the error
-    }
-}
-
-// Run the check immediately when the page loads
-checkServerHealth();
+        async function checkServerHealth() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/legend`, { signal: AbortSignal.timeout(5000) });
+                if (!response.ok) throw new Error("Server returned an error");
+                console.log("Server is healthy!");
+            } catch (error) {
+                console.error("Server is offline:", error);
+                document.querySelector('.dashboard-container').style.display = 'none'; 
+                document.getElementById('offline-screen').style.display = 'block'; 
+            }
+        }
+        checkServerHealth();
         
         const START_YEAR = 2001; const END_YEAR = 2024;
         let currentTimelineData = null; let lulcChartInstance = null;
@@ -224,6 +214,7 @@ checkServerHealth();
 
         // --- UI TOGGLE LOGIC ---
         const btns = document.querySelectorAll('.tool-btn');
+        
         function resetUI() { 
             btns.forEach(b => b.classList.remove('active')); 
             document.getElementById('manual-rect-section').style.display='none';
@@ -235,26 +226,9 @@ checkServerHealth();
         }
         
         document.getElementById('btn-draw-poly').addEventListener('click', (e) => { resetUI(); e.target.classList.add('active'); polygonDrawer.enable(); });
-        
-        document.getElementById('btn-draw-rect').addEventListener('click', (e) => { 
-            resetUI(); e.target.classList.add('active'); 
-            document.getElementById('manual-rect-section').style.display='flex'; 
-            rectDrawer.enable(); 
-        });
-
-        document.getElementById('btn-draw-circle').addEventListener('click', (e) => { 
-            resetUI(); e.target.classList.add('active'); 
-            document.getElementById('manual-circle-section').style.display='flex'; 
-            circleDrawer.enable(); 
-        });
-
-        document.getElementById('btn-draw-point').addEventListener('click', (e) => { 
-            resetUI(); e.target.classList.add('active'); 
-            document.getElementById('manual-point-section').style.display='flex'; 
-            isPointMode = true; 
-            document.getElementById('map').style.cursor = 'crosshair';
-        });
-
+        document.getElementById('btn-draw-rect').addEventListener('click', (e) => { resetUI(); e.target.classList.add('active'); document.getElementById('manual-rect-section').style.display='flex'; rectDrawer.enable(); });
+        document.getElementById('btn-draw-circle').addEventListener('click', (e) => { resetUI(); e.target.classList.add('active'); document.getElementById('manual-circle-section').style.display='flex'; circleDrawer.enable(); });
+        document.getElementById('btn-draw-point').addEventListener('click', (e) => { resetUI(); e.target.classList.add('active'); document.getElementById('manual-point-section').style.display='flex'; isPointMode = true; document.getElementById('map').style.cursor = 'crosshair'; });
         document.getElementById('btn-clear').addEventListener('click', () => { resetUI(); clearMap(); });
 
         function clearMap() {
@@ -298,22 +272,61 @@ checkServerHealth();
             return { type: "Polygon", coordinates: [coords] };
         }
 
+        // --- INDIA GEOFENCE HELPER ---
+        function isOutsideIndia(lat, lng) {
+            if (lat < 6.5 || lat > 37.5 || lng < 68.0 || lng > 97.5) {
+                alert("Area outside India. Please select a region within the Indian boundaries.");
+                resetUI(); // Turn off the button if they click outside
+                return true; 
+            }
+            return false;
+        }
+
         // --- MOUSE DRAWING EVENTS ---
         map.on('click', function(e) {
             if (!isPointMode) return;
+            
+            // Geofence check for point clicks
+            if (isOutsideIndia(e.latlng.lat, e.latlng.lng)) return;
+
             drawnItems.clearLayers();
             L.marker(e.latlng).addTo(drawnItems);
             processPoint(e.latlng.lat, e.latlng.lng);
+            resetUI(); // Turns the point button back to white
         });
 
-        map.on(L.Draw.Event.CREATED, function (e) {
-            drawnItems.clearLayers(); drawnItems.addLayer(e.layer);
-            if (e.layerType === 'circle') {
-                currentGeometry = circleToPolygon(e.layer.getLatLng(), e.layer.getRadius());
+        map.on(L.Draw.Event.CREATED, async function (e) {
+            const layer = e.layer;
+            const type = e.layerType;
+
+            let lat, lng;
+            
+            // Safely get coordinates depending on shape
+            if (type === 'circle') {
+                lat = layer.getLatLng().lat;
+                lng = layer.getLatLng().lng;
             } else {
-                currentGeometry = e.layer.toGeoJSON().geometry;
+                const center = layer.getBounds().getCenter();
+                lat = center.lat;
+                lng = center.lng;
             }
-            processPolygon(currentGeometry);
+
+            // Geofence check for Shapes
+            if (isOutsideIndia(lat, lng)) return;
+            
+            drawnItems.clearLayers();
+            drawnItems.addLayer(layer);
+            
+            // Process the specific geometry
+            if (type === 'circle') {
+                currentGeometry = circleToPolygon(layer.getLatLng(), layer.getRadius());
+                processPolygon(currentGeometry);
+            } else {
+                currentGeometry = layer.toGeoJSON().geometry;
+                processPolygon(currentGeometry);
+            }
+            
+            resetUI(); // Turns the polygon/rectangle/circle button back to white
         });
 
         // --- MANUAL INPUT SUBMISSIONS ---
@@ -323,9 +336,13 @@ checkServerHealth();
             if (isNaN(n) || isNaN(s) || isNaN(w) || isNaN(e)) { alert("Enter all 4 coordinates."); return; }
             
             const bounds = [[s, w], [n, e]];
+            const center = L.latLngBounds(bounds).getCenter();
+            if (isOutsideIndia(center.lat, center.lng)) return;
+
             const rectLayer = L.rectangle(bounds, { color: '#2b6cb0' });
             drawnItems.clearLayers(); drawnItems.addLayer(rectLayer); map.fitBounds(bounds); 
             currentGeometry = rectLayer.toGeoJSON().geometry; processPolygon(currentGeometry);
+            resetUI();
         }
 
         function submitManualCircle() {
@@ -333,25 +350,28 @@ checkServerHealth();
             const lon = parseFloat(document.getElementById('circ-lon').value);
             const rad = parseFloat(document.getElementById('circ-rad').value);
             if (isNaN(lat) || isNaN(lon) || isNaN(rad)) { alert("Enter Lat, Lon, and Radius."); return; }
-            
+            if (isOutsideIndia(lat, lon)) return;
+
             const pt = L.latLng(lat, lon);
             const circLayer = L.circle(pt, { radius: rad, color: '#2b6cb0' });
             drawnItems.clearLayers(); drawnItems.addLayer(circLayer); map.fitBounds(circLayer.getBounds());
-            
             currentGeometry = circleToPolygon(pt, rad); 
             processPolygon(currentGeometry);
+            resetUI();
         }
 
         function submitManualPoint() {
             const lat = parseFloat(document.getElementById('pt-lat').value); 
             const lon = parseFloat(document.getElementById('pt-lon').value);
             if (isNaN(lat) || isNaN(lon)) { alert("Enter valid Lat and Lon."); return; }
-            
+            if (isOutsideIndia(lat, lon)) return;
+
             drawnItems.clearLayers();
             const pt = L.latLng(lat, lon);
             L.marker(pt).addTo(drawnItems);
-            map.setView(pt, 12); // Zoom in on the point
+            map.setView(pt, 12); 
             processPoint(lat, lon);
+            resetUI();
         }
 
         // --- BACKEND PROCESSING ---
@@ -363,8 +383,8 @@ checkServerHealth();
 
             try {
                 const response = await fetch(`${API_BASE_URL}/api/lulc?lat=${lat}&lon=${lon}`);
+                if (!response.ok) throw new Error("Backend failed");
                 const data = await response.json();
-                if (!response.ok) throw new Error("Failed");
 
                 metaDisplay.innerHTML = `<strong>Point Analysis Complete</strong> | Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}`;
                 const formattedData = data.temporal_timeline.map(item => ({
@@ -376,8 +396,10 @@ checkServerHealth();
                 currentGeometry = null; 
                 renderStackedBarChart(formattedData);
                 vizContainer.style.display = "block";
-                resetUI();
-            } catch (error) { clearMap(); alert("Failed to analyze point. Check if it is inside the dataset bounds."); }
+            } catch (error) { 
+                clearMap(); 
+                alert("Analysis Failed: The selected point may contain no data or fall entirely outside the valid dataset boundaries."); 
+            }
         }
 
         async function processPolygon(geometry) {
@@ -390,14 +412,17 @@ checkServerHealth();
                 const response = await fetch(`${API_BASE_URL}/api/lulc/polygon`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ geometry: geometry })
                 });
+                if (!response.ok) throw new Error("Backend failed");
                 const data = await response.json();
-                if (!response.ok) { alert(`Analysis Failed`); clearMap(); return; }
 
                 metaDisplay.innerHTML = `<strong>Area Analysis Complete</strong>`;
                 currentTimelineData = data.temporal_timeline;
                 renderStackedBarChart(currentTimelineData);
                 vizContainer.style.display = "block";
-            } catch (error) { clearMap(); }
+            } catch (error) { 
+                clearMap(); 
+                alert("Analysis Failed: Please ensure the selected area is entirely within the Indian landmass."); 
+            }
         }
 
         // --- CHART & DOWNLOADS ---
