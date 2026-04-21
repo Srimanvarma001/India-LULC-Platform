@@ -5,12 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>India LULC Advanced Analytics (2001-2024)</title>
 
-    <!-- FIX: preconnect tells the browser to open connections to these CDNs EARLY,
-         while the HTML is still being parsed — saves ~300-500ms per domain -->
     <link rel="preconnect" href="https://unpkg.com">
     <link rel="preconnect" href="https://cdnjs.cloudflare.com">
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
-    <link rel="preconnect" href="https://api.sriman.online">
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
@@ -25,57 +22,84 @@
 
         body { font-family: 'Inter', system-ui, sans-serif; margin: 0; padding: 0; background-color: var(--bg-body); color: var(--text-dark); overflow: hidden; }
 
-        header { background: var(--bg-card); padding: 10px 20px; box-shadow: var(--shadow); border-bottom: 2px solid #e2e8f0; margin-bottom: 15px; text-align: center;}
+        header { background: var(--bg-card); padding: 10px 20px; box-shadow: var(--shadow); border-bottom: 2px solid #e2e8f0; text-align: center; }
         header h1 { margin: 0; font-size: 24px; font-weight: 700; color: var(--primary); }
         header p { margin: 2px 0 0; font-size: 14px; color: var(--text-gray); }
 
+        /* Offline Banner - lives OUTSIDE dashboard, so hiding dashboard never swallows it */
+        #offline-banner {
+            display: none;
+            align-items: center;
+            gap: 12px;
+            background: #fff3cd;
+            color: #856404;
+            border-bottom: 2px solid #ffc107;
+            padding: 8px 20px;
+            font-size: 13px;
+        }
+        #offline-banner.visible { display: flex; }
+        #offline-banner strong { font-size: 14px; }
+        #offline-banner .banner-icon { font-size: 18px; flex-shrink: 0; }
+        #offline-banner .retry-btn {
+            margin-left: auto;
+            padding: 4px 12px;
+            background: #856404;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        #offline-banner .retry-btn:hover { background: #6d4e02; }
+
         .dashboard-container { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; max-width: 1800px; height: calc(100vh - 95px); margin: 0 auto; padding: 0 20px 20px; }
 
-        #map-card { background: var(--bg-card); border-radius: var(--border-radius); box-shadow: var(--shadow); border: 1px solid #e2e8f0; display: flex; flex-direction: column; height: 100%;}
-        #map { flex-grow: 1; width: 100%; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;}
+        #map-card { background: var(--bg-card); border-radius: var(--border-radius); box-shadow: var(--shadow); border: 1px solid #e2e8f0; display: flex; flex-direction: column; height: 100%; }
+        #map { flex-grow: 1; width: 100%; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; }
 
-        #analysis-panel { display: flex; flex-direction: column; gap: 15px; height: 100%; overflow-y: auto; padding-right: 5px;}
+        #analysis-panel { display: flex; flex-direction: column; gap: 15px; height: 100%; overflow-y: auto; padding-right: 5px; }
         .card { background: var(--bg-card); border-radius: var(--border-radius); box-shadow: var(--shadow); padding: 15px; border: 1px solid #e2e8f0; }
         .card-header { font-size: 18px; font-weight: 600; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 10px; }
         .card-metadata { font-size: 13px; color: var(--text-gray); margin-bottom: 15px; padding: 8px; background: #edf2f7; border-radius: 6px; }
 
-        #legend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-size: 12px; margin-top: 5px; }
+        #legend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-size: 12px; margin-top: 5px; min-height: 40px; }
         .legend-item { display: flex; align-items: center; gap: 6px; }
-        .legend-color-box { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0;}
+        .legend-color-box { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0; }
+        .legend-placeholder { font-size: 12px; color: var(--text-gray); font-style: italic; }
 
         .chart-container { position: relative; height: 320px; width: 100%; }
 
-        .custom-toolbar { display: flex; align-items: center; background: white; padding: 8px 15px; border-bottom: 1px solid #e2e8f0; border-top-left-radius: 8px; border-top-right-radius: 8px; gap: 15px; flex-wrap: wrap;}
+        .custom-toolbar { display: flex; align-items: center; background: white; padding: 8px 15px; border-bottom: 1px solid #e2e8f0; border-top-left-radius: 8px; border-top-right-radius: 8px; gap: 15px; flex-wrap: wrap; }
         
-        .tool-btn { padding: 6px 12px; background: white; color: var(--primary); border: 1px solid var(--primary); border-radius: 4px; cursor: pointer; font-weight: 600; transition: all 0.2s; font-size: 12px; display: flex; align-items: center; gap: 5px;}
+        .tool-btn { padding: 6px 12px; background: white; color: var(--primary); border: 1px solid var(--primary); border-radius: 4px; cursor: pointer; font-weight: 600; transition: all 0.2s; font-size: 12px; display: flex; align-items: center; gap: 5px; }
         .tool-btn:hover, .tool-btn.active { background: var(--primary); color: white; }
+        .tool-btn.server-down { opacity: 0.45; cursor: not-allowed; border-color: #aaa; color: #aaa; }
+        .tool-btn.server-down:hover { background: white; color: #aaa; }
         .btn-danger { color: #e53e3e; border-color: #e53e3e; }
         .btn-danger:hover { background: #e53e3e; color: white; }
+        .btn-danger.server-down:hover { background: white; }
 
-        .manual-bounds { display: none; align-items: center; gap: 8px; border-left: 2px solid #e2e8f0; padding-left: 15px;}
+        .manual-bounds { display: none; align-items: center; gap: 8px; border-left: 2px solid #e2e8f0; padding-left: 15px; }
         .manual-bounds input { padding: 4px 6px; border: 1px solid #cbd5e0; border-radius: 4px; width: 65px; font-size: 12px; }
-        .action-btn-small { padding: 5px 10px; background: var(--text-dark); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;}
+        .action-btn-small { padding: 5px 10px; background: var(--text-dark); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
 
-        .download-btn-main { margin-top: 5px; padding: 8px 15px; background-color: var(--accent-green); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; width: 100%; transition: background 0.2s;}
+        .download-btn-main { margin-top: 5px; padding: 8px 15px; background-color: var(--accent-green); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; width: 100%; transition: background 0.2s; }
         .download-btn-main:hover { background-color: #218838; }
         
-        .download-zone { margin-top: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #e2e8f0; padding-top: 15px;}
+        .download-zone { margin-top: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #e2e8f0; padding-top: 15px; }
         .dl-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; }
-        .dl-title { font-size: 14px; font-weight: bold; color: var(--primary); margin-bottom: 3px;}
-        
-        .dl-row-layout { display: flex; justify-content: space-between; align-items: center; margin-top: 4px;}
-        .dl-desc { font-size: 11px; color: var(--text-gray); margin: 0;}
+        .dl-title { font-size: 14px; font-weight: bold; color: var(--primary); margin-bottom: 3px; }
+        .dl-row-layout { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
+        .dl-desc { font-size: 11px; color: var(--text-gray); margin: 0; }
         .dl-controls { display: flex; gap: 8px; align-items: center; }
         .dl-controls select { padding: 6px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px; }
         
-        .btn-dl { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; color: white; transition: opacity 0.2s;}
+        .btn-dl { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; color: white; transition: opacity 0.2s; }
         .btn-dl:hover { opacity: 0.9; }
         .btn-dl:disabled { opacity: 0.5; cursor: not-allowed; }
         .bg-blue { background-color: var(--primary); }
         .bg-gray { background-color: #4a5568; }
-
-        /* FIX: Loading spinner shown in legend while server warms up */
-        .legend-loading { font-size: 12px; color: var(--text-gray); padding: 8px 0; }
     </style>
 </head>
 <body>
@@ -85,27 +109,25 @@
         <p>Analyze historical land cover composition by drawing regions or selecting points on the map.</p>
     </header>
 
-    <div class="dashboard-container">
-        <!-- Offline screen: hidden by default, shown only if server is truly unreachable -->
-        <div id="offline-screen" style="display: none; text-align: center; padding: 100px 20px; background-color: #f8f9fa; height: 100vh; position: absolute; width: 100%; z-index: 9999; top: 0; left: 0;">
-            <h1 style="color: #2c5f2d; font-size: 2.5rem; margin-bottom: 20px;">🌍 LULC Analytics Dashboard</h1>
-            <p style="font-size: 1.2rem; color: #555; max-width: 600px; margin: 0 auto 30px; line-height: 1.6;">
-                This interactive tool analyzes historical Land Use and Land Cover composition across India using high-resolution satellite datasets. 
-            </p>
-            <div style="background: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 20px; border-radius: 8px; max-width: 500px; margin: 0 auto;">
-                <strong>⚠️ System Offline for Maintenance</strong><br><br>
-                The physical lab server hosting the heavy geospatial data is currently offline. Please check back later or contact the laboratory administrator.
-            </div>
+    <!-- FIX: Banner is OUTSIDE .dashboard-container — hiding the dashboard can never hide this -->
+    <div id="offline-banner">
+        <span class="banner-icon">&#9888;&#65039;</span>
+        <div>
+            <strong>Analysis Server Offline</strong> &mdash;
+            The lab server is currently unreachable. You can still explore the map, but drawing and analysis features are disabled until the server comes back online.
         </div>
-        
+        <button class="retry-btn" onclick="retryConnection()">&#8635; Retry</button>
+    </div>
+
+    <div class="dashboard-container">
         <div id="map-card">
             <div class="custom-toolbar">
                 <span style="font-size: 13px; font-weight: bold;">Draw Shape:</span>
-                <button class="tool-btn" id="btn-draw-poly">⬠ Polygon</button>
-                <button class="tool-btn" id="btn-draw-rect">▭ Rectangle</button>
-                <button class="tool-btn" id="btn-draw-circle">◯ Circle</button>
-                <button class="tool-btn" id="btn-draw-point">📍 Point</button>
-                <button class="tool-btn btn-danger" id="btn-clear">🗑 Clear</button>
+                <button class="tool-btn" id="btn-draw-poly">&#11040; Polygon</button>
+                <button class="tool-btn" id="btn-draw-rect">&#9645; Rectangle</button>
+                <button class="tool-btn" id="btn-draw-circle">&#9711; Circle</button>
+                <button class="tool-btn" id="btn-draw-point">&#128205; Point</button>
+                <button class="tool-btn btn-danger" id="btn-clear">&#128465; Clear</button>
                 
                 <div class="manual-bounds" id="manual-rect-section">
                     <span style="font-size: 12px; font-weight:bold;">Bounds:</span>
@@ -117,7 +139,7 @@
                 </div>
 
                 <div class="manual-bounds" id="manual-circle-section">
-                    <span style="font-size: 12px; font-weight:bold;">Center & Radius:</span>
+                    <span style="font-size: 12px; font-weight:bold;">Center &amp; Radius:</span>
                     <input type="number" id="circ-lat" placeholder="Lat" step="0.01">
                     <input type="number" id="circ-lon" placeholder="Lon" step="0.01">
                     <input type="number" id="circ-rad" placeholder="Rad (m)" step="100">
@@ -137,9 +159,8 @@
         <div id="analysis-panel">
             <div class="card" id="legend-card">
                 <div class="card-header">LULC Class Palette</div>
-                <!-- FIX: Shows a placeholder while legend loads in the background -->
                 <div id="legend-grid">
-                    <span class="legend-loading">⏳ Loading legend...</span>
+                    <span class="legend-placeholder">&#9203; Loading legend...</span>
                 </div>
             </div>
 
@@ -154,7 +175,7 @@
                         <canvas id="lulcChart"></canvas>
                     </div>
 
-                    <button id="downloadCsvBtn" class="download-btn-main">⬇ Download Area Stats (CSV)</button>
+                    <button id="downloadCsvBtn" class="download-btn-main">&#11015; Download Area Stats (CSV)</button>
                     
                     <div class="download-zone">
                         <div class="dl-card">
@@ -186,307 +207,282 @@
         </div>
     </div>
 
-    <!-- FIX: defer attribute — scripts download in parallel but execute only after HTML is parsed.
-         The map and UI are visible to the user before any JS runs. -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+    <!-- Scripts at bottom = non-blocking. NO defer because Leaflet.Draw must load after Leaflet — order matters. -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script>
-        const API_BASE_URL = "https://api.sriman.online"; 
+        const API_BASE_URL = "https://api.sriman.online";
         const START_YEAR = 2001; const END_YEAR = 2024;
         let currentTimelineData = null; let lulcChartInstance = null;
-        let drawnItems, currentGeometry = null;
+        let drawnItems = new L.FeatureGroup(); let currentGeometry = null;
         let isPointMode = false;
-        let map;
+        let serverOnline = false;
 
-        // FIX: Initialize everything after window.load so the page is fully painted
-        // before any network requests are made to the lab server.
-        window.addEventListener('load', function () {
-            initMap();
-            initYearSelects();
+        // Map always initializes immediately — no backend needed for this
+        const map = L.map('map').setView([22.9734, 78.6569], 5);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        }).addTo(map);
+        map.addLayer(drawnItems);
 
-            // FIX: Combined health check + legend into ONE fetch call.
-            // Previously: 2 simultaneous calls to the same slow server on page load.
-            // Now: 1 call, used for both purposes — half the server load.
-            initAppFromLegend();
+        const polygonDrawer = new L.Draw.Polygon(map, { allowIntersection: false });
+        const rectDrawer    = new L.Draw.Rectangle(map, { shapeOptions: { color: '#2b6cb0' } });
+        const circleDrawer  = new L.Draw.Circle(map, { shapeOptions: { color: '#2b6cb0' } });
+
+        document.querySelectorAll('.year-select').forEach(select => {
+            for (let y = START_YEAR; y <= END_YEAR; y++) select.appendChild(new Option(y, y));
         });
 
-        function initMap() {
-            drawnItems = new L.FeatureGroup();
-            map = L.map('map').setView([22.9734, 78.6569], 5);
+        // Backend check runs after map is painted (setTimeout 0 = next event loop tick)
+        setTimeout(checkServerAndLoadLegend, 0);
 
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-            }).addTo(map);
-
-            map.addLayer(drawnItems);
-            initDrawTools();
-            initToolbarEvents();
-        }
-
-        function initYearSelects() {
-            document.querySelectorAll('.year-select').forEach(select => {
-                for (let y = START_YEAR; y <= END_YEAR; y++) select.appendChild(new Option(y, y));
-            });
-        }
-
-        // FIX: One combined function — fetches /api/legend once.
-        // If it succeeds → server is healthy → render legend.
-        // If it fails → server is offline → show offline screen.
-        async function initAppFromLegend() {
+        async function checkServerAndLoadLegend() {
             try {
                 const response = await fetch(`${API_BASE_URL}/api/legend`, {
                     signal: AbortSignal.timeout(5000)
                 });
                 if (!response.ok) throw new Error("Server error");
-
                 const legendData = await response.json();
-                const legendGrid = document.getElementById('legend-grid');
-                legendGrid.innerHTML = ''; // clear the loading placeholder
+                serverOnline = true;
 
+                const legendGrid = document.getElementById('legend-grid');
+                legendGrid.innerHTML = '';
                 Object.entries(legendData).forEach(([code, details]) => {
                     const item = document.createElement('div');
                     item.className = 'legend-item';
-                    item.innerHTML = `<div class="legend-color-box" style="background-color: ${details.color}"></div><span>${details.name}</span>`;
+                    item.innerHTML = `<div class="legend-color-box" style="background-color:${details.color}"></div><span>${details.name}</span>`;
                     legendGrid.appendChild(item);
                 });
 
+                // Restore buttons if this was a retry
+                document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('server-down'));
+                document.getElementById('offline-banner').classList.remove('visible');
+                document.getElementById('location-meta-display').innerHTML = 'Select a drawing tool above the map to begin.';
+
             } catch (error) {
-                console.error("Server is offline:", error);
-                document.querySelector('.dashboard-container').style.display = 'none';
-                document.getElementById('offline-screen').style.display = 'block';
+                serverOnline = false;
+                showOfflineState();
             }
         }
 
-        // ── Draw Tools ──
-        let polygonDrawer, rectDrawer, circleDrawer;
-
-        function initDrawTools() {
-            polygonDrawer = new L.Draw.Polygon(map, { allowIntersection: false });
-            rectDrawer    = new L.Draw.Rectangle(map, { shapeOptions: { color: '#2b6cb0' } });
-            circleDrawer  = new L.Draw.Circle(map, { shapeOptions: { color: '#2b6cb0' } });
+        function showOfflineState() {
+            document.getElementById('offline-banner').classList.add('visible');
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.add('server-down'));
+            document.getElementById('location-meta-display').innerHTML =
+                `<span style="color:#856404;">&#9888; Analysis unavailable — lab server is offline. The map is still fully explorable.</span>`;
+            document.getElementById('legend-grid').innerHTML =
+                `<span class="legend-placeholder" style="color:#bbb;">Unavailable while server is offline</span>`;
         }
 
-        function initToolbarEvents() {
-            document.getElementById('btn-draw-poly').addEventListener('click',   (e) => { resetUI(); e.target.classList.add('active'); polygonDrawer.enable(); });
-            document.getElementById('btn-draw-rect').addEventListener('click',   (e) => { resetUI(); e.target.classList.add('active'); document.getElementById('manual-rect-section').style.display='flex'; rectDrawer.enable(); });
-            document.getElementById('btn-draw-circle').addEventListener('click', (e) => { resetUI(); e.target.classList.add('active'); document.getElementById('manual-circle-section').style.display='flex'; circleDrawer.enable(); });
-            document.getElementById('btn-draw-point').addEventListener('click',  (e) => { resetUI(); e.target.classList.add('active'); document.getElementById('manual-point-section').style.display='flex'; isPointMode = true; document.getElementById('map').style.cursor = 'crosshair'; });
-            document.getElementById('btn-clear').addEventListener('click', () => { resetUI(); clearMap(); });
+        async function retryConnection() {
+            const banner = document.getElementById('offline-banner');
+            banner.innerHTML = `<span class="banner-icon">&#128260;</span><div><strong>Retrying connection...</strong></div>`;
+            await checkServerAndLoadLegend();
+            if (!serverOnline) {
+                banner.innerHTML = `
+                    <span class="banner-icon">&#9888;&#65039;</span>
+                    <div><strong>Analysis Server Offline</strong> &mdash; Still unreachable. You can still explore the map.</div>
+                    <button class="retry-btn" onclick="retryConnection()">&#8635; Retry</button>`;
+            }
+        }
 
-            map.on('click', function(e) {
-                if (!isPointMode) return;
-                if (isOutsideIndia(e.latlng.lat, e.latlng.lng)) return;
-                drawnItems.clearLayers();
-                L.marker(e.latlng).addTo(drawnItems);
-                processPoint(e.latlng.lat, e.latlng.lng);
-                resetUI();
-            });
-
-            map.on(L.Draw.Event.CREATED, async function (e) {
-                const layer = e.layer;
-                const type = e.layerType;
-                let lat, lng;
-                if (type === 'circle') { lat = layer.getLatLng().lat; lng = layer.getLatLng().lng; }
-                else { const center = layer.getBounds().getCenter(); lat = center.lat; lng = center.lng; }
-                if (isOutsideIndia(lat, lng)) return;
-                drawnItems.clearLayers();
-                drawnItems.addLayer(layer);
-                if (type === 'circle') { currentGeometry = circleToPolygon(layer.getLatLng(), layer.getRadius()); processPolygon(currentGeometry); }
-                else { currentGeometry = layer.toGeoJSON().geometry; processPolygon(currentGeometry); }
-                resetUI();
-            });
+        // Guard: blocks any draw action if server is down
+        function guardedAction(fn) {
+            if (!serverOnline) {
+                alert("The analysis server is currently offline.\nDraw tools will be enabled once the server comes back online.");
+                return;
+            }
+            fn();
         }
 
         const btns = document.querySelectorAll('.tool-btn');
+
         function resetUI() {
             btns.forEach(b => b.classList.remove('active'));
-            document.getElementById('manual-rect-section').style.display='none';
-            document.getElementById('manual-circle-section').style.display='none';
-            document.getElementById('manual-point-section').style.display='none';
+            document.getElementById('manual-rect-section').style.display = 'none';
+            document.getElementById('manual-circle-section').style.display = 'none';
+            document.getElementById('manual-point-section').style.display = 'none';
             isPointMode = false;
             document.getElementById('map').style.cursor = '';
-            if (polygonDrawer) { polygonDrawer.disable(); rectDrawer.disable(); circleDrawer.disable(); }
+            polygonDrawer.disable(); rectDrawer.disable(); circleDrawer.disable();
         }
+
+        document.getElementById('btn-draw-poly').addEventListener('click',   (e) => guardedAction(() => { resetUI(); e.target.classList.add('active'); polygonDrawer.enable(); }));
+        document.getElementById('btn-draw-rect').addEventListener('click',   (e) => guardedAction(() => { resetUI(); e.target.classList.add('active'); document.getElementById('manual-rect-section').style.display='flex'; rectDrawer.enable(); }));
+        document.getElementById('btn-draw-circle').addEventListener('click', (e) => guardedAction(() => { resetUI(); e.target.classList.add('active'); document.getElementById('manual-circle-section').style.display='flex'; circleDrawer.enable(); }));
+        document.getElementById('btn-draw-point').addEventListener('click',  (e) => guardedAction(() => { resetUI(); e.target.classList.add('active'); document.getElementById('manual-point-section').style.display='flex'; isPointMode = true; document.getElementById('map').style.cursor = 'crosshair'; }));
+        document.getElementById('btn-clear').addEventListener('click', () => { resetUI(); clearMap(); });
 
         function clearMap() {
             drawnItems.clearLayers(); currentGeometry = null;
             document.getElementById('timeline-viz-container').style.display = "none";
-            document.getElementById('location-meta-display').innerHTML = "Select a drawing tool above the map to begin.";
+            document.getElementById('location-meta-display').innerHTML = serverOnline
+                ? "Select a drawing tool above the map to begin."
+                : `<span style="color:#856404;">&#9888; Analysis unavailable — lab server is offline. The map is still fully explorable.</span>`;
+        }
+
+        map.on('click', function(e) {
+            if (!isPointMode) return;
+            if (isOutsideIndia(e.latlng.lat, e.latlng.lng)) return;
+            drawnItems.clearLayers();
+            L.marker(e.latlng).addTo(drawnItems);
+            processPoint(e.latlng.lat, e.latlng.lng);
+            resetUI();
+        });
+
+        map.on(L.Draw.Event.CREATED, async function (e) {
+            const layer = e.layer; const type = e.layerType;
+            let lat, lng;
+            if (type === 'circle') { lat = layer.getLatLng().lat; lng = layer.getLatLng().lng; }
+            else { const center = layer.getBounds().getCenter(); lat = center.lat; lng = center.lng; }
+            if (isOutsideIndia(lat, lng)) return;
+            drawnItems.clearLayers(); drawnItems.addLayer(layer);
+            if (type === 'circle') { currentGeometry = circleToPolygon(layer.getLatLng(), layer.getRadius()); processPolygon(currentGeometry); }
+            else { currentGeometry = layer.toGeoJSON().geometry; processPolygon(currentGeometry); }
+            resetUI();
+        });
+
+        function submitManualRect() {
+            if (!serverOnline) { alert("Server is offline."); return; }
+            const n=parseFloat(document.getElementById('box-n').value), s=parseFloat(document.getElementById('box-s').value),
+                  w=parseFloat(document.getElementById('box-w').value), e=parseFloat(document.getElementById('box-e').value);
+            if (isNaN(n)||isNaN(s)||isNaN(w)||isNaN(e)) { alert("Enter all 4 coordinates."); return; }
+            const bounds=[[s,w],[n,e]], center=L.latLngBounds(bounds).getCenter();
+            if (isOutsideIndia(center.lat,center.lng)) return;
+            const rectLayer=L.rectangle(bounds,{color:'#2b6cb0'});
+            drawnItems.clearLayers(); drawnItems.addLayer(rectLayer); map.fitBounds(bounds);
+            currentGeometry=rectLayer.toGeoJSON().geometry; processPolygon(currentGeometry); resetUI();
+        }
+
+        function submitManualCircle() {
+            if (!serverOnline) { alert("Server is offline."); return; }
+            const lat=parseFloat(document.getElementById('circ-lat').value),
+                  lon=parseFloat(document.getElementById('circ-lon').value),
+                  rad=parseFloat(document.getElementById('circ-rad').value);
+            if (isNaN(lat)||isNaN(lon)||isNaN(rad)) { alert("Enter Lat, Lon, and Radius."); return; }
+            if (isOutsideIndia(lat,lon)) return;
+            const pt=L.latLng(lat,lon), circLayer=L.circle(pt,{radius:rad,color:'#2b6cb0'});
+            drawnItems.clearLayers(); drawnItems.addLayer(circLayer); map.fitBounds(circLayer.getBounds());
+            currentGeometry=circleToPolygon(pt,rad); processPolygon(currentGeometry); resetUI();
+        }
+
+        function submitManualPoint() {
+            if (!serverOnline) { alert("Server is offline."); return; }
+            const lat=parseFloat(document.getElementById('pt-lat').value), lon=parseFloat(document.getElementById('pt-lon').value);
+            if (isNaN(lat)||isNaN(lon)) { alert("Enter valid Lat and Lon."); return; }
+            if (isOutsideIndia(lat,lon)) return;
+            drawnItems.clearLayers(); L.marker(L.latLng(lat,lon)).addTo(drawnItems);
+            map.setView(L.latLng(lat,lon),12); processPoint(lat,lon); resetUI();
         }
 
         function circleToPolygon(center, radius) {
-            const numPoints = 64; const coords = [];
-            const earthRadius = 6378137;
-            const lat = center.lat * Math.PI / 180; const lon = center.lng * Math.PI / 180;
-            const d = radius / earthRadius;
-            for (let i = 0; i <= numPoints; i++) {
-                const bearing = i * 2 * Math.PI / numPoints;
-                const outLat = Math.asin(Math.sin(lat) * Math.cos(d) + Math.cos(lat) * Math.sin(d) * Math.cos(bearing));
-                const outLon = lon + Math.atan2(Math.sin(bearing) * Math.sin(d) * Math.cos(lat), Math.cos(d) - Math.sin(lat) * Math.sin(outLat));
-                coords.push([outLon * 180 / Math.PI, outLat * 180 / Math.PI]);
+            const numPoints=64, coords=[], earthRadius=6378137;
+            const lat=center.lat*Math.PI/180, lon=center.lng*Math.PI/180, d=radius/earthRadius;
+            for (let i=0;i<=numPoints;i++) {
+                const bearing=i*2*Math.PI/numPoints;
+                const outLat=Math.asin(Math.sin(lat)*Math.cos(d)+Math.cos(lat)*Math.sin(d)*Math.cos(bearing));
+                const outLon=lon+Math.atan2(Math.sin(bearing)*Math.sin(d)*Math.cos(lat),Math.cos(d)-Math.sin(lat)*Math.sin(outLat));
+                coords.push([outLon*180/Math.PI,outLat*180/Math.PI]);
             }
-            return { type: "Polygon", coordinates: [coords] };
+            return { type:"Polygon", coordinates:[coords] };
         }
 
         function isOutsideIndia(lat, lng) {
-            if (lat < 6.5 || lat > 37.5 || lng < 68.0 || lng > 97.5) {
+            if (lat<6.5||lat>37.5||lng<68.0||lng>97.5) {
                 alert("Area outside India. Please select a region within the Indian boundaries.");
-                resetUI();
-                return true;
+                resetUI(); return true;
             }
             return false;
         }
 
-        function submitManualRect() {
-            const n = parseFloat(document.getElementById('box-n').value); const s = parseFloat(document.getElementById('box-s').value);
-            const w = parseFloat(document.getElementById('box-w').value); const e = parseFloat(document.getElementById('box-e').value);
-            if (isNaN(n) || isNaN(s) || isNaN(w) || isNaN(e)) { alert("Enter all 4 coordinates."); return; }
-            const bounds = [[s, w], [n, e]];
-            const center = L.latLngBounds(bounds).getCenter();
-            if (isOutsideIndia(center.lat, center.lng)) return;
-            const rectLayer = L.rectangle(bounds, { color: '#2b6cb0' });
-            drawnItems.clearLayers(); drawnItems.addLayer(rectLayer); map.fitBounds(bounds);
-            currentGeometry = rectLayer.toGeoJSON().geometry; processPolygon(currentGeometry);
-            resetUI();
-        }
-
-        function submitManualCircle() {
-            const lat = parseFloat(document.getElementById('circ-lat').value);
-            const lon = parseFloat(document.getElementById('circ-lon').value);
-            const rad = parseFloat(document.getElementById('circ-rad').value);
-            if (isNaN(lat) || isNaN(lon) || isNaN(rad)) { alert("Enter Lat, Lon, and Radius."); return; }
-            if (isOutsideIndia(lat, lon)) return;
-            const pt = L.latLng(lat, lon);
-            const circLayer = L.circle(pt, { radius: rad, color: '#2b6cb0' });
-            drawnItems.clearLayers(); drawnItems.addLayer(circLayer); map.fitBounds(circLayer.getBounds());
-            currentGeometry = circleToPolygon(pt, rad);
-            processPolygon(currentGeometry);
-            resetUI();
-        }
-
-        function submitManualPoint() {
-            const lat = parseFloat(document.getElementById('pt-lat').value);
-            const lon = parseFloat(document.getElementById('pt-lon').value);
-            if (isNaN(lat) || isNaN(lon)) { alert("Enter valid Lat and Lon."); return; }
-            if (isOutsideIndia(lat, lon)) return;
-            drawnItems.clearLayers();
-            const pt = L.latLng(lat, lon);
-            L.marker(pt).addTo(drawnItems);
-            map.setView(pt, 12);
-            processPoint(lat, lon);
-            resetUI();
-        }
-
         async function processPoint(lat, lon) {
-            const metaDisplay = document.getElementById('location-meta-display');
-            const vizContainer = document.getElementById('timeline-viz-container');
-            metaDisplay.innerHTML = `<span style="color: var(--primary); font-weight: bold;">⏳ Extracting timeline for coordinate...</span>`;
-            vizContainer.style.display = "none";
+            const metaDisplay=document.getElementById('location-meta-display'), vizContainer=document.getElementById('timeline-viz-container');
+            metaDisplay.innerHTML=`<span style="color:var(--primary);font-weight:bold;">&#9203; Extracting timeline for coordinate...</span>`;
+            vizContainer.style.display="none";
             try {
-                const response = await fetch(`${API_BASE_URL}/api/lulc?lat=${lat}&lon=${lon}`);
+                const response=await fetch(`${API_BASE_URL}/api/lulc?lat=${lat}&lon=${lon}`);
                 if (!response.ok) throw new Error("Backend failed");
-                const data = await response.json();
-                metaDisplay.innerHTML = `<strong>Point Analysis Complete</strong> | Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}`;
-                const formattedData = data.temporal_timeline.map(item => ({
-                    year: item.year,
-                    stats: { [item.lulc_name]: { percentage: 100, area_sqkm: 0, color: item.lulc_color } }
-                }));
-                currentTimelineData = formattedData;
-                currentGeometry = null;
-                renderStackedBarChart(formattedData);
-                vizContainer.style.display = "block";
-            } catch (error) {
+                const data=await response.json();
+                metaDisplay.innerHTML=`<strong>Point Analysis Complete</strong> | Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}`;
+                const formattedData=data.temporal_timeline.map(item=>({year:item.year,stats:{[item.lulc_name]:{percentage:100,area_sqkm:0,color:item.lulc_color}}}));
+                currentTimelineData=formattedData; currentGeometry=null;
+                renderStackedBarChart(formattedData); vizContainer.style.display="block";
+            } catch(error) {
                 clearMap();
-                alert("Analysis Failed: The selected point may contain no data or fall entirely outside the valid dataset boundaries.");
+                // TypeError = network failure = server went down mid-session
+                if (error instanceof TypeError) {
+                    serverOnline = false;
+                    showOfflineState();
+                } else {
+                    metaDisplay.innerHTML = `<span style="color:#c53030;">&#10060; No data found for this point. Try a different location inside India.</span>`;
+                }
             }
         }
 
         async function processPolygon(geometry) {
-            const metaDisplay = document.getElementById('location-meta-display');
-            const vizContainer = document.getElementById('timeline-viz-container');
-            metaDisplay.innerHTML = `<span style="color: var(--primary); font-weight: bold;">⏳ Clipping satellite data... Please wait.</span>`;
-            vizContainer.style.display = "none";
+            const metaDisplay=document.getElementById('location-meta-display'), vizContainer=document.getElementById('timeline-viz-container');
+            metaDisplay.innerHTML=`<span style="color:var(--primary);font-weight:bold;">&#9203; Clipping satellite data... Please wait.</span>`;
+            vizContainer.style.display="none";
             try {
-                const response = await fetch(`${API_BASE_URL}/api/lulc/polygon`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ geometry: geometry })
-                });
+                const response=await fetch(`${API_BASE_URL}/api/lulc/polygon`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({geometry})});
                 if (!response.ok) throw new Error("Backend failed");
-                const data = await response.json();
-                metaDisplay.innerHTML = `<strong>Area Analysis Complete</strong>`;
-                currentTimelineData = data.temporal_timeline;
-                renderStackedBarChart(currentTimelineData);
-                vizContainer.style.display = "block";
-            } catch (error) {
+                const data=await response.json();
+                metaDisplay.innerHTML=`<strong>Area Analysis Complete</strong>`;
+                currentTimelineData=data.temporal_timeline; renderStackedBarChart(currentTimelineData); vizContainer.style.display="block";
+            } catch(error) {
                 clearMap();
-                alert("Analysis Failed: Please ensure the selected area is entirely within the Indian landmass.");
+                // TypeError = network failure = server went down mid-session
+                if (error instanceof TypeError) {
+                    serverOnline = false;
+                    showOfflineState();
+                } else {
+                    metaDisplay.innerHTML = `<span style="color:#c53030;">&#10060; Analysis failed. Ensure the selected area is entirely within the Indian landmass.</span>`;
+                }
             }
         }
 
         function renderStackedBarChart(timelineData) {
-            const ctx = document.getElementById('lulcChart').getContext('2d');
+            const ctx=document.getElementById('lulcChart').getContext('2d');
             if (lulcChartInstance) lulcChartInstance.destroy();
-            const labels = timelineData.map(d => d.year);
-            const classMap = {};
-            timelineData.forEach((yearData) => {
-                Object.entries(yearData.stats).forEach(([className, stats]) => {
-                    if (!classMap[className]) classMap[className] = { label: className, data: Array(labels.length).fill(0), backgroundColor: stats.color };
-                });
-            });
-            timelineData.forEach((yearData, index) => {
-                Object.entries(yearData.stats).forEach(([className, stats]) => { classMap[className].data[index] = stats.percentage; });
-            });
-            lulcChartInstance = new Chart(ctx, {
-                type: 'bar', data: { labels: labels, datasets: Object.values(classMap) },
-                options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, max: 100 } }, plugins: { legend: { display: false } } }
-            });
+            const labels=timelineData.map(d=>d.year), classMap={};
+            timelineData.forEach(yearData=>Object.entries(yearData.stats).forEach(([cn,stats])=>{if(!classMap[cn])classMap[cn]={label:cn,data:Array(labels.length).fill(0),backgroundColor:stats.color};}));
+            timelineData.forEach((yearData,i)=>Object.entries(yearData.stats).forEach(([cn,stats])=>{classMap[cn].data[i]=stats.percentage;}));
+            lulcChartInstance=new Chart(ctx,{type:'bar',data:{labels,datasets:Object.values(classMap)},options:{responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true},y:{stacked:true,max:100}},plugins:{legend:{display:false}}}});
         }
 
-        document.getElementById('downloadCsvBtn').addEventListener('click', function() {
+        document.getElementById('downloadCsvBtn').addEventListener('click',function(){
             if (!currentTimelineData) return;
-            let csvContent = "Year,Land Cover Class,Percentage (%),Area (Sq Km),Hex Color\n";
-            currentTimelineData.forEach(row => { Object.entries(row.stats).forEach(([className, stats]) => { csvContent += `${row.year},"${className}",${stats.percentage},${stats.area_sqkm},${stats.color}\n`; }); });
-            const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }));
-            link.download = `Area_Analysis.csv`; link.click();
+            let csv="Year,Land Cover Class,Percentage (%),Area (Sq Km),Hex Color\n";
+            currentTimelineData.forEach(row=>Object.entries(row.stats).forEach(([cn,s])=>{csv+=`${row.year},"${cn}",${s.percentage},${s.area_sqkm},${s.color}\n`;}));
+            const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'})); a.download="Area_Analysis.csv"; a.click();
         });
 
-        async function downloadTiffFile(type, btn) {
-            const year = document.getElementById(`tiff-year-${type}`).value;
-            const originalText = btn.innerText;
-            btn.innerText = "⏳ Processing..."; btn.disabled = true;
-            if (type === 'orig') {
-                window.location.href = `${API_BASE_URL}/api/download-tiff-original?year=${year}`;
-                setTimeout(() => { btn.innerText = originalText; btn.disabled = false; }, 2500);
-            } else {
-                if (!currentGeometry) { alert("Please draw a shape first. Cannot crop a TIFF using a Point."); btn.innerText = originalText; btn.disabled = false; return; }
+        async function downloadTiffFile(type,btn) {
+            const year=document.getElementById(`tiff-year-${type}`).value, orig=btn.innerText;
+            btn.innerText="&#9203; Processing..."; btn.disabled=true;
+            if (type==='orig') { window.location.href=`${API_BASE_URL}/api/download-tiff-original?year=${year}`; setTimeout(()=>{btn.innerText=orig;btn.disabled=false;},2500); }
+            else {
+                if (!currentGeometry) { alert("Please draw a shape first."); btn.innerText=orig; btn.disabled=false; return; }
                 try {
-                    const response = await fetch(`${API_BASE_URL}/api/download-tiff-cropped?year=${year}`, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ geometry: currentGeometry })
-                    });
-                    if (!response.ok) throw new Error("Failed");
-                    const a = document.createElement('a'); a.href = window.URL.createObjectURL(await response.blob());
-                    a.download = `Cropped_LULC_Data_${year}.tif`; a.click();
-                } catch (e) { alert("Error downloading cropped file."); } finally { btn.innerText = originalText; btn.disabled = false; }
+                    const r=await fetch(`${API_BASE_URL}/api/download-tiff-cropped?year=${year}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({geometry:currentGeometry})});
+                    if (!r.ok) throw new Error("Failed");
+                    const a=document.createElement('a'); a.href=window.URL.createObjectURL(await r.blob()); a.download=`Cropped_LULC_Data_${year}.tif`; a.click();
+                } catch(e){alert("Error downloading cropped file.");} finally{btn.innerText=orig;btn.disabled=false;}
             }
         }
 
-        async function downloadAllTiffs(type, btn) {
-            const originalText = btn.innerText;
-            btn.innerText = "⏳ Zipping files..."; btn.disabled = true;
-            if (type === 'orig') {
-                window.location.href = `${API_BASE_URL}/api/download-all-tiffs-original`;
-                setTimeout(() => { btn.innerText = originalText; btn.disabled = false; }, 3000);
-            } else {
-                if (!currentGeometry) { alert("Please draw a shape first. Cannot crop a TIFF using a Point."); btn.innerText = originalText; btn.disabled = false; return; }
+        async function downloadAllTiffs(type,btn) {
+            const orig=btn.innerText; btn.innerText="&#9203; Zipping files..."; btn.disabled=true;
+            if (type==='orig') { window.location.href=`${API_BASE_URL}/api/download-all-tiffs-original`; setTimeout(()=>{btn.innerText=orig;btn.disabled=false;},3000); }
+            else {
+                if (!currentGeometry) { alert("Please draw a shape first."); btn.innerText=orig; btn.disabled=false; return; }
                 try {
-                    const response = await fetch(`${API_BASE_URL}/api/download-all-tiffs-cropped`, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ geometry: currentGeometry })
-                    });
-                    if (!response.ok) throw new Error("Failed");
-                    const a = document.createElement('a'); a.href = window.URL.createObjectURL(await response.blob());
-                    a.download = `Cropped_LULC_All_Years.zip`; a.click();
-                } catch (e) { alert("Error generating zip file."); } finally { btn.innerText = originalText; btn.disabled = false; }
+                    const r=await fetch(`${API_BASE_URL}/api/download-all-tiffs-cropped`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({geometry:currentGeometry})});
+                    if (!r.ok) throw new Error("Failed");
+                    const a=document.createElement('a'); a.href=window.URL.createObjectURL(await r.blob()); a.download="Cropped_LULC_All_Years.zip"; a.click();
+                } catch(e){alert("Error generating zip file.");} finally{btn.innerText=orig;btn.disabled=false;}
             }
         }
     </script>
