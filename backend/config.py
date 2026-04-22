@@ -3,7 +3,7 @@ import os
 # --- System Paths ---
 # This automatically finds the correct folders no matter whose PC this runs on
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATASET_FOLDER = os.path.abspath(os.path.join(BASE_DIR, "../../indian_dataset"))
+DATASET_FOLDER = os.path.abspath(os.path.join(BASE_DIR, "..", "indian_dataset"))
 GEOJSON_PATH = os.path.join(BASE_DIR, "india_boundary.geojson")
 
 # --- LULC Canonical Palette ---
